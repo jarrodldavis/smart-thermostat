@@ -58,6 +58,11 @@ void app_main()
   ESP_LOGI (TAG, "Reading EEPROM");
   eepromInit();
 
+  // Initialize networking
+  ESP_LOGI (TAG, "Initializing networking");
+  ESP_ERROR_CHECK(NetworkInit());
+  ESP_LOGI (TAG, "Network infrastructure initialized; Wi-Fi not started");
+
   // Initialize the TFT display
   ESP_LOGI (TAG, "Initializing TFT");
   tftInit();
@@ -79,13 +84,6 @@ void app_main()
   ESP_LOGI (TAG, "Starting Matter");
   OperatingParameters.MatterStarted = MatterInit();
 #endif
-
-  // Start wifi
-  ESP_LOGI (TAG, "Starting wifi (\"%s\", \"%s\")", WifiCreds.ssid, WifiCreds.password);
-  ESP_ERROR_CHECK(esp_netif_init());
-  OperatingParameters.wifiConnected = 
-    // wifiStart(WifiCreds.hostname, WifiCreds.ssid, WifiCreds.password);
-    WifiStart(OperatingParameters.DeviceName, WifiCreds.ssid, WifiCreds.password);
 
 #ifdef MQTT_ENABLED
   // Start Matter

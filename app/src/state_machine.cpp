@@ -396,33 +396,34 @@ void stateMachine(void *parameter)
     // Update HVAC State machine
     hvacStateUpdate();
 
+    // Temporarily disabled while networking.cpp takes ownership of Wi-Fi.
     // Check and Update wifi connection status
-    OperatingParameters.wifiConnected = WifiConnected();
-    if ((millis() > lastWifiReconnect + WIFI_CONNECT_INTERVAL) &&
-        (wifi_reconnect_check(&OperatingParameters)))
-    {
-      lastWifiReconnect = millis();
-      startReconnectTask();
-    }
+    // OperatingParameters.wifiConnected = WifiConnected();
+    // if ((millis() > lastWifiReconnect + WIFI_CONNECT_INTERVAL) &&
+    //     (wifi_reconnect_check(&OperatingParameters)))
+    // {
+    //   lastWifiReconnect = millis();
+    //   startReconnectTask();
+    // }
 
-    if (OperatingParameters.wifiConnected)
-    {
-      if (!telnetServiceRunning())
-        telnetStart();
+    // if (OperatingParameters.wifiConnected)
+    // {
+    //   if (!telnetServiceRunning())
+    //     telnetStart();
 
-      //
-      // Call MqttConnect() once to establish the MQTT connection.
-      //
-      // NB: We never set MqttConnectCalled to false so it is only ever
-      // called once at startup. The MQTT subsystem handles reconnects.
-      //
-      if (is_mqtt_enabled(&OperatingParameters) &&
-          !is_mqtt_connected(&OperatingParameters) && !MqttConnectCalled)
-      {
-        MqttConnectCalled = true;
-        MqttConnect();
-      }
-    }
+    //   //
+    //   // Call MqttConnect() once to establish the MQTT connection.
+    //   //
+    //   // NB: We never set MqttConnectCalled to false so it is only ever
+    //   // called once at startup. The MQTT subsystem handles reconnects.
+    //   //
+    //   if (is_mqtt_enabled(&OperatingParameters) &&
+    //       !is_mqtt_connected(&OperatingParameters) && !MqttConnectCalled)
+    //   {
+    //     MqttConnectCalled = true;
+    //     MqttConnect();
+    //   }
+    // }
 
     // Determine if it's time to update the SNTP sourced clock and
     // display the amount of available heap space.

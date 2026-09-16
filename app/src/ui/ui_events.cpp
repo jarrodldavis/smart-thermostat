@@ -119,10 +119,11 @@ void StartWifiScan(lv_event_t * e)
 {
   audioBeep();
   lv_obj_add_state(ui_ScanBtn, LV_STATE_DISABLED);
-  lv_label_set_text(ui_WifiStatusLabel, "Scanning...");
+  lv_label_set_text(ui_WifiStatusLabel, "Wi-Fi Scan: TODO");
 
+  // Temporarily disabled while networking.cpp takes ownership of Wi-Fi.
   // Scan for SSIDs. This is done synchronously, so complete it via a RTOS task.
-  networkScanner();
+  // networkScanner();
 }
 
 extern bool wifiScanActive;
@@ -213,21 +214,22 @@ void tftUpdateUiSleepValue(lv_event_t * e)
 
 void tftSetNewWifi(lv_event_t * e)
 {
-  lv_dropdown_get_selected_str(ui_SsidDropdown, WifiCreds.ssid, sizeof(WifiCreds.ssid));
-  if (strlen(WifiCreds.ssid) > 0)
-  {
-    strcpy (WifiCreds.password, lv_textarea_get_text(ui_PSK));
-    printf ("*** [tftSetNewWifi] WifiCreds.password = %s\n", WifiCreds.password);
-    // Save the new wifi credentials to NVRAM
-    setWifiCreds(); //Store locally (in Thermostat NVS)
-    WifiSetCredentials(WifiCreds.ssid, WifiCreds.password);
-    // Initiate a disconnect so the new wifi info will be used when auto-reconnect happens
-    WifiDisconnect();
+// Temporarily disabled while networking.cpp takes ownership of Wi-Fi.
+//   lv_dropdown_get_selected_str(ui_SsidDropdown, WifiCreds.ssid, sizeof(WifiCreds.ssid));
+//   if (strlen(WifiCreds.ssid) > 0)
+//   {
+//     strcpy (WifiCreds.password, lv_textarea_get_text(ui_PSK));
+//     printf ("*** [tftSetNewWifi] WifiCreds.password = %s\n", WifiCreds.password);
+//     // Save the new wifi credentials to NVRAM
+//     setWifiCreds(); //Store locally (in Thermostat NVS)
+//     WifiSetCredentials(WifiCreds.ssid, WifiCreds.password);
+//     // Initiate a disconnect so the new wifi info will be used when auto-reconnect happens
+//     WifiDisconnect();
 
-    // Immediately start a new wifi connection
-    lastWifiReconnect = 0;
-//    startReconnectTask();
-  }
+//     // Immediately start a new wifi connection
+//     lastWifiReconnect = 0;
+// //    startReconnectTask();
+//   }
 }
 
 void tftClearPsk(lv_event_t * e)
@@ -617,10 +619,11 @@ void saveDeviceName(lv_event_t * e)
 
   if (strcmp(oldName, OperatingParameters.DeviceName))
   {
-    printf ("Hostname/Devicename changed -- Restarting wifi to update network name\n");
-    // Initiate a disconnect so the new wifi info will be used when auto-reconnect happens
-    WifiDisconnect();
-    // Immediately start a new wifi connection
-    lastWifiReconnect = 0;
+    // Temporarily disabled while networking.cpp takes ownership of Wi-Fi.
+    // printf ("Hostname/Devicename changed -- Restarting wifi to update network name\n");
+    // // Initiate a disconnect so the new wifi info will be used when auto-reconnect happens
+    // WifiDisconnect();
+    // // Immediately start a new wifi connection
+    // lastWifiReconnect = 0;
   }
 }
