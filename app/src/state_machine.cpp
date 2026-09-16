@@ -24,6 +24,7 @@
 OPERATING_PARAMETERS OperatingParameters;
 extern int64_t lastTimeUpdate;
 int64_t lastWifiReconnect;
+int64_t lastRssiUpdate;
 static bool MqttConnectCalled = false;
 static int64_t lastFanOnTime = 0;
 
@@ -383,6 +384,7 @@ void stateMachine(void *parameter)
 {
   lastTimeUpdate = millis();
   lastWifiReconnect = millis();
+  lastRssiUpdate = millis();
   tracker_init(&tracker);
 
   for (;;)
@@ -395,6 +397,12 @@ void stateMachine(void *parameter)
 
     // Update HVAC State machine
     hvacStateUpdate();
+
+    // TODO: move to network coordinator
+    if (millis() > lastRssiUpdate + NETWORK_RSSI_INTERVAL) {
+      lastRssiUpdate = millis();
+      NetworkRefreshRssi();
+    }
 
     // Temporarily disabled while networking.cpp takes ownership of Wi-Fi.
     // Check and Update wifi connection status

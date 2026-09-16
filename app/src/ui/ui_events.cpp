@@ -158,21 +158,27 @@ void LoadInfoStrings(lv_event_t * e)
     lv_obj_add_flag(ui_ShowQRLabel, LV_OBJ_FLAG_HIDDEN);
   }
 
-  if (WifiConnected())
+  NETWORK_STATUS network = NetworkGetStatus();
+  if (network.link == NETWORK_READY)
     lv_obj_add_state(ui_WifiConnCheckBox, LV_STATE_CHECKED);
 	else
     lv_obj_clear_state(ui_WifiConnCheckBox, LV_STATE_CHECKED);
   lv_label_set_recolor(ui_WifiSsidLabel, true);
-  lv_label_set_text_fmt(ui_WifiSsidLabel, "%s SSID:# %s", LABEL_COLOR, WifiCreds.ssid);
+  lv_label_set_text_fmt(ui_WifiSsidLabel, "%s SSID:# %s", LABEL_COLOR, network.ssid);
 
   lv_label_set_recolor(ui_HostnameLabel, true);
   lv_label_set_text_fmt(ui_HostnameLabel, "%s Hostname:# %s", LABEL_COLOR, OperatingParameters.DeviceName);
 
   lv_label_set_recolor(ui_IPLabel, true);
-  lv_label_set_text_fmt(ui_IPLabel, "%s IP:# %s", LABEL_COLOR, WifiAddress());
+  lv_label_set_text_fmt(ui_IPLabel, "%s IP:# " IPSTR, LABEL_COLOR, IP2STR(&network.ip));
 
   lv_label_set_recolor(ui_RssiLabel, true);
-  lv_label_set_text_fmt(ui_RssiLabel, "%s Signal:# %d%%", LABEL_COLOR, WifiSignal());
+  if (network.rssi_valid)
+  {
+    lv_label_set_text_fmt(ui_RssiLabel, "%s Signal:# %d%%", LABEL_COLOR, NetworkRssiToPercent(network.rssi));
+  } else {
+    lv_label_set_text_fmt(ui_RssiLabel, "%s Signal:# N/A", LABEL_COLOR);
+  }
 
   lv_label_set_recolor(ui_FwVersionLabel, true);
   lv_label_set_text_fmt(ui_FwVersionLabel, "%s Firmware:# %s", LABEL_COLOR, VersionString);

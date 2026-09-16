@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
+#include <algorithm>
 
 static const char *TAG = "NETWORK";
 
@@ -13,13 +14,17 @@ static esp_netif_t *station_interface = nullptr;
 static esp_event_handler_instance_t wifi_event_handler_instance;
 static esp_event_handler_instance_t ip_event_handler_instance;
 
+static uint32_t connection_generation = 0;
 static portMUX_TYPE status_lock = portMUX_INITIALIZER_UNLOCKED;
 static const esp_ip4_addr_t NO_IP = {.addr = 0};
 static const uint8_t NO_DISCONNECT_REASON = 0;
 static NETWORK_STATUS current_status = {
   .link = NETWORK_OFFLINE,
   .ip = NO_IP,
-  .disconnect_reason = 0
+  .disconnect_reason = NO_DISCONNECT_REASON,
+  .ssid = "",
+  .rssi = 0,
+  .rssi_valid = false
 };
 
 static void networkEventHandler(
@@ -38,6 +43,9 @@ static void networkEventHandler(
       current_status.link = NETWORK_OFFLINE;
       current_status.ip = NO_IP;
       current_status.disconnect_reason = NO_DISCONNECT_REASON;
+      current_status.ssid[0] = '\0';
+      current_status.rssi = 0;
+      current_status.rssi_valid = false;
       portEXIT_CRITICAL(&status_lock);
 
       ESP_LOGE(TAG, "Failed to connect to Wi-Fi: %s", esp_err_to_name(err));
@@ -45,9 +53,20 @@ static void networkEventHandler(
   }
 
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
+    const auto *connected = static_cast<const wifi_event_sta_connected_t *>(event_data);
+    size_t ssid_len = connected->ssid_len;
+    if (ssid_len > sizeof(current_status.ssid) - 1) {
+      ssid_len = sizeof(current_status.ssid) - 1;
+    }
+
     portENTER_CRITICAL(&status_lock);
+    ++connection_generation;
     current_status.link = NETWORK_WAITING_FOR_IP;
     current_status.ip = NO_IP;
+    memcpy(current_status.ssid, connected->ssid, ssid_len);
+    current_status.ssid[ssid_len] = '\0';
+    current_status.rssi = 0;
+    current_status.rssi_valid = false;
     portEXIT_CRITICAL(&status_lock);
 
     ESP_LOGI(TAG, "Wi-Fi connected");
@@ -80,9 +99,13 @@ static void networkEventHandler(
     uint8_t reason = ((wifi_event_sta_disconnected_t *)event_data)->reason;
 
     portENTER_CRITICAL(&status_lock);
+    ++connection_generation;
     current_status.link = NETWORK_OFFLINE;
     current_status.ip = NO_IP;
     current_status.disconnect_reason = reason;
+    current_status.ssid[0] = '\0';
+    current_status.rssi = 0;
+    current_status.rssi_valid = false;
     portEXIT_CRITICAL(&status_lock);
 
     ESP_LOGI(TAG, "Wi-Fi disconnected, reason: %d", reason);
@@ -90,9 +113,13 @@ static void networkEventHandler(
 
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_STOP) {
     portENTER_CRITICAL(&status_lock);
+    ++connection_generation;
     current_status.link = NETWORK_OFFLINE;
     current_status.ip = NO_IP;
     current_status.disconnect_reason = NO_DISCONNECT_REASON;
+    current_status.ssid[0] = '\0';
+    current_status.rssi = 0;
+    current_status.rssi_valid = false;
     portEXIT_CRITICAL(&status_lock);
 
     ESP_LOGI(TAG, "Wi-Fi stopped");
@@ -117,6 +144,9 @@ esp_err_t NetworkInit()
   current_status.link = NETWORK_OFFLINE;
   current_status.ip = NO_IP;
   current_status.disconnect_reason = NO_DISCONNECT_REASON;
+  current_status.ssid[0] = '\0';
+  current_status.rssi = 0;
+  current_status.rssi_valid = false;
   portEXIT_CRITICAL(&status_lock);
 
   bool event_loop_created = false;
@@ -252,9 +282,13 @@ esp_err_t NetworkConnectSaved() {
   }
 
   portENTER_CRITICAL(&status_lock);
+  ++connection_generation;
   current_status.link = NETWORK_CONNECTING;
   current_status.ip = NO_IP;
   current_status.disconnect_reason = NO_DISCONNECT_REASON;
+  current_status.ssid[0] = '\0';
+  current_status.rssi = 0;
+  current_status.rssi_valid = false;
   portEXIT_CRITICAL(&status_lock);
 
   err = esp_wifi_start();
@@ -263,6 +297,9 @@ esp_err_t NetworkConnectSaved() {
     current_status.link = NETWORK_OFFLINE;
     current_status.ip = NO_IP;
     current_status.disconnect_reason = NO_DISCONNECT_REASON;
+    current_status.ssid[0] = '\0';
+    current_status.rssi = 0;
+    current_status.rssi_valid = false;
     portEXIT_CRITICAL(&status_lock);
 
     ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(err));
@@ -270,4 +307,40 @@ esp_err_t NetworkConnectSaved() {
   }
 
   return ESP_OK;
+}
+
+void NetworkRefreshRssi()
+{
+  uint32_t generation;
+  bool associated;
+
+  portENTER_CRITICAL(&status_lock);
+  generation = connection_generation;
+  associated =
+    current_status.link == NETWORK_WAITING_FOR_IP ||
+    current_status.link == NETWORK_READY;
+  portEXIT_CRITICAL(&status_lock);
+
+  if (!associated)
+  {
+    return;
+  }
+
+  wifi_ap_record_t ap_info = {};
+  esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+
+  portENTER_CRITICAL(&status_lock);
+  if (generation == connection_generation &&
+      (current_status.link == NETWORK_WAITING_FOR_IP ||
+       current_status.link == NETWORK_READY))
+  {
+    current_status.rssi = (err == ESP_OK) ? ap_info.rssi : 0;
+    current_status.rssi_valid = (err == ESP_OK);
+  }
+  portEXIT_CRITICAL(&status_lock);
+}
+
+uint16_t NetworkRssiToPercent(int rssi)
+{
+  return static_cast<uint16_t>(std::clamp(2 * (rssi + 100), 0, 100));
 }
