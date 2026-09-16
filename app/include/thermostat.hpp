@@ -138,6 +138,19 @@ typedef struct
 
 } WIFI_STATUS;
 
+enum NETWORK_LINK_STATE {
+  NETWORK_OFFLINE,
+  NETWORK_CONNECTING,
+  NETWORK_WAITING_FOR_IP,
+  NETWORK_READY
+};
+
+struct NETWORK_STATUS {
+  NETWORK_LINK_STATE link;
+  esp_ip4_addr_t ip;
+  uint8_t disconnect_reason;
+};
+
 
 extern OPERATING_PARAMETERS OperatingParameters;
 extern WIFI_CREDS WifiCreds;
@@ -253,6 +266,7 @@ char *WifiAddress();
 char *Get_WiFiSSID_DD_List( void );
 void WiFi_ScanSSID( void );
 
+NETWORK_STATUS NetworkGetStatus();
 esp_err_t NetworkInit();
 esp_err_t NetworkConnectSaved();
 

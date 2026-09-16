@@ -13,6 +13,15 @@ static esp_netif_t *station_interface = nullptr;
 static esp_event_handler_instance_t wifi_event_handler_instance;
 static esp_event_handler_instance_t ip_event_handler_instance;
 
+static portMUX_TYPE status_lock = portMUX_INITIALIZER_UNLOCKED;
+static const esp_ip4_addr_t NO_IP = {.addr = 0};
+static const uint8_t NO_DISCONNECT_REASON = 0;
+static NETWORK_STATUS current_status = {
+  .link = NETWORK_OFFLINE,
+  .ip = NO_IP,
+  .disconnect_reason = 0
+};
+
 static void networkEventHandler(
   void *arg,
   esp_event_base_t event_base,
@@ -25,23 +34,77 @@ static void networkEventHandler(
     ESP_LOGI(TAG, "Wi-Fi started, attempting to connect to saved network");
     err = esp_wifi_connect();
     if (err != ESP_OK) {
+      portENTER_CRITICAL(&status_lock);
+      current_status.link = NETWORK_OFFLINE;
+      current_status.ip = NO_IP;
+      current_status.disconnect_reason = NO_DISCONNECT_REASON;
+      portEXIT_CRITICAL(&status_lock);
+
       ESP_LOGE(TAG, "Failed to connect to Wi-Fi: %s", esp_err_to_name(err));
     }
   }
 
-  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-    uint8_t reason = ((wifi_event_sta_disconnected_t *)event_data)->reason;
-    ESP_LOGI(TAG, "Wi-Fi disconnected, reason: %d", reason);
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
+    portENTER_CRITICAL(&status_lock);
+    current_status.link = NETWORK_WAITING_FOR_IP;
+    current_status.ip = NO_IP;
+    portEXIT_CRITICAL(&status_lock);
+
+    ESP_LOGI(TAG, "Wi-Fi connected");
   }
 
   if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t *got_ip_event = (ip_event_got_ip_t *)event_data;
+
+    portENTER_CRITICAL(&status_lock);
+    current_status.link = NETWORK_READY;
+    current_status.ip = got_ip_event->ip_info.ip;
+    current_status.disconnect_reason = NO_DISCONNECT_REASON;
+    portEXIT_CRITICAL(&status_lock);
+
     ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&got_ip_event->ip_info.ip));
   }
 
   if (event_base == IP_EVENT && event_id == IP_EVENT_STA_LOST_IP) {
+    portENTER_CRITICAL(&status_lock);
+    current_status.ip = NO_IP;
+    if (current_status.link == NETWORK_READY) {
+      current_status.link = NETWORK_WAITING_FOR_IP;
+    }
+    portEXIT_CRITICAL(&status_lock);
+
     ESP_LOGI(TAG, "Lost IP address");
   }
+
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    uint8_t reason = ((wifi_event_sta_disconnected_t *)event_data)->reason;
+
+    portENTER_CRITICAL(&status_lock);
+    current_status.link = NETWORK_OFFLINE;
+    current_status.ip = NO_IP;
+    current_status.disconnect_reason = reason;
+    portEXIT_CRITICAL(&status_lock);
+
+    ESP_LOGI(TAG, "Wi-Fi disconnected, reason: %d", reason);
+  }
+
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_STOP) {
+    portENTER_CRITICAL(&status_lock);
+    current_status.link = NETWORK_OFFLINE;
+    current_status.ip = NO_IP;
+    current_status.disconnect_reason = NO_DISCONNECT_REASON;
+    portEXIT_CRITICAL(&status_lock);
+
+    ESP_LOGI(TAG, "Wi-Fi stopped");
+  }
+}
+
+NETWORK_STATUS NetworkGetStatus()
+{
+  portENTER_CRITICAL(&status_lock);
+  NETWORK_STATUS status = current_status;
+  portEXIT_CRITICAL(&status_lock);
+  return status;
 }
 
 esp_err_t NetworkInit()
@@ -49,6 +112,12 @@ esp_err_t NetworkInit()
   if (network_initialized) {
     return ESP_OK;
   }
+
+  portENTER_CRITICAL(&status_lock);
+  current_status.link = NETWORK_OFFLINE;
+  current_status.ip = NO_IP;
+  current_status.disconnect_reason = NO_DISCONNECT_REASON;
+  portEXIT_CRITICAL(&status_lock);
 
   bool event_loop_created = false;
   bool wifi_initialized = false;
@@ -182,8 +251,20 @@ esp_err_t NetworkConnectSaved() {
     return err;
   }
 
+  portENTER_CRITICAL(&status_lock);
+  current_status.link = NETWORK_CONNECTING;
+  current_status.ip = NO_IP;
+  current_status.disconnect_reason = NO_DISCONNECT_REASON;
+  portEXIT_CRITICAL(&status_lock);
+
   err = esp_wifi_start();
   if (err != ESP_OK) {
+    portENTER_CRITICAL(&status_lock);
+    current_status.link = NETWORK_OFFLINE;
+    current_status.ip = NO_IP;
+    current_status.disconnect_reason = NO_DISCONNECT_REASON;
+    portEXIT_CRITICAL(&status_lock);
+
     ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(err));
     return err;
   }
