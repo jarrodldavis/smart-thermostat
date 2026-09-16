@@ -19,7 +19,29 @@ static void networkEventHandler(
   int32_t event_id,
   void *event_data)
 {
-  // Handle network events here
+  esp_err_t err;
+
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+    ESP_LOGI(TAG, "Wi-Fi started, attempting to connect to saved network");
+    err = esp_wifi_connect();
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to connect to Wi-Fi: %s", esp_err_to_name(err));
+    }
+  }
+
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    uint8_t reason = ((wifi_event_sta_disconnected_t *)event_data)->reason;
+    ESP_LOGI(TAG, "Wi-Fi disconnected, reason: %d", reason);
+  }
+
+  if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    ip_event_got_ip_t *got_ip_event = (ip_event_got_ip_t *)event_data;
+    ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&got_ip_event->ip_info.ip));
+  }
+
+  if (event_base == IP_EVENT && event_id == IP_EVENT_STA_LOST_IP) {
+    ESP_LOGI(TAG, "Lost IP address");
+  }
 }
 
 esp_err_t NetworkInit()
@@ -37,7 +59,7 @@ esp_err_t NetworkInit()
     if (ip_handler_registered) {
       ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
         IP_EVENT,
-        IP_EVENT_STA_GOT_IP,
+        ESP_EVENT_ANY_ID,
         ip_event_handler_instance
       ));
       ip_event_handler_instance = nullptr;
@@ -114,7 +136,7 @@ esp_err_t NetworkInit()
 
   err = esp_event_handler_instance_register(
     IP_EVENT,
-    IP_EVENT_STA_GOT_IP,
+    ESP_EVENT_ANY_ID,
     &networkEventHandler,
     nullptr,
     &ip_event_handler_instance
@@ -126,5 +148,45 @@ esp_err_t NetworkInit()
   ip_handler_registered = true;
 
   network_initialized = true;
+  return ESP_OK;
+}
+
+esp_err_t NetworkConnectSaved() {
+  if (!network_initialized) {
+    ESP_LOGE(TAG, "Network not initialized");
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  esp_err_t err = ESP_OK;
+
+  wifi_config_t config = {};
+  err = esp_wifi_get_config(WIFI_IF_STA, &config);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get Wi-Fi config: %s", esp_err_to_name(err));
+    return err;
+  }
+  if (config.sta.ssid[0] == '\0') {
+    ESP_LOGI(TAG, "No saved Wi-Fi network found");
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  err = esp_netif_set_hostname(station_interface, OperatingParameters.DeviceName);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set hostname: %s", esp_err_to_name(err));
+    return err;
+  }
+
+  err = esp_wifi_set_mode(WIFI_MODE_STA);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set Wi-Fi mode: %s", esp_err_to_name(err));
+    return err;
+  }
+
+  err = esp_wifi_start();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(err));
+    return err;
+  }
+
   return ESP_OK;
 }

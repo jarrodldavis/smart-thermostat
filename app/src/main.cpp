@@ -113,6 +113,15 @@ void app_main()
   ESP_LOGI (TAG, "Starting state machine task");
   stateCreateTask();
 
+  ESP_LOGI (TAG, "Requesting connection to saved network");
+  esp_err_t network_err = NetworkConnectSaved();
+  if (network_err == ESP_ERR_NOT_FOUND) {
+    ESP_LOGI(TAG, "No saved network; continuing offline");
+  } else if (network_err != ESP_OK) {
+    ESP_LOGW(TAG, "Could not start Wi-Fi connection: %s; continuing offline",
+            esp_err_to_name(network_err));
+  }
+
   ESP_LOGI (TAG, "Saving config info");
   saveConfig();
 

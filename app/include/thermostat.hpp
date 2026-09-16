@@ -254,6 +254,7 @@ char *Get_WiFiSSID_DD_List( void );
 void WiFi_ScanSSID( void );
 
 esp_err_t NetworkInit();
+esp_err_t NetworkConnectSaved();
 
 // TFT
 void tftInit();
