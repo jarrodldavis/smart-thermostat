@@ -9,6 +9,9 @@
 
 static const char *TAG = "NETWORK";
 
+static constexpr uint32_t RECONNECT_INITIAL_DELAY_MS = 2000;
+static constexpr uint32_t RECONNECT_MAX_DELAY_MS = 30000;
+
 static bool netif_initialized = false;
 static bool network_initialized = false;
 static esp_netif_t *station_interface = nullptr;
@@ -16,7 +19,9 @@ static esp_netif_t *station_interface = nullptr;
 ESP_EVENT_DEFINE_BASE(NETWORK_EVENT);
 
 enum {
-  NETWORK_EVENT_REFRESH_RSSI
+  NETWORK_EVENT_REFRESH_RSSI,
+  NETWORK_EVENT_RECONNECT,
+  NETWORK_EVENT_CONNECT_SAVED,
 };
 
 static esp_event_handler_instance_t wifi_event_handler_instance;
@@ -24,6 +29,12 @@ static esp_event_handler_instance_t ip_event_handler_instance;
 static esp_event_handler_instance_t network_event_handler_instance;
 
 static esp_timer_handle_t rssi_timer = nullptr;
+static esp_timer_handle_t reconnect_timer = nullptr;
+
+static bool normal_connection_enabled = false;
+static bool reconnect_pending = false;
+static int64_t reconnect_due_us = 0;
+static uint32_t reconnect_delay_ms = RECONNECT_INITIAL_DELAY_MS;
 
 static uint32_t connection_generation = 0;
 static portMUX_TYPE status_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -43,28 +54,108 @@ static void rssiTimerCallback(void *arg)
   (void)esp_event_post(NETWORK_EVENT, NETWORK_EVENT_REFRESH_RSSI, nullptr, 0, 0);
 }
 
+static void reconnectTimerCallback(void *arg)
+{
+  (void)esp_event_post(NETWORK_EVENT, NETWORK_EVENT_RECONNECT, nullptr, 0, 0);
+}
+
+static void scheduleReconnect()
+{
+  if (!normal_connection_enabled || reconnect_pending) {
+    return;
+  }
+
+  NETWORK_STATUS status = NetworkGetStatus();
+  if (status.link != NETWORK_OFFLINE) {
+    return;
+  }
+
+  esp_err_t err = esp_timer_stop(reconnect_timer);
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    ESP_LOGE(TAG, "Failed to stop reconnect timer: %s", esp_err_to_name(err));
+    return;
+  }
+
+  uint64_t delay_us = static_cast<uint64_t>(reconnect_delay_ms) * 1000ULL;
+  reconnect_due_us = esp_timer_get_time() + delay_us;
+  err = esp_timer_start_once(reconnect_timer, delay_us);
+  if (err != ESP_OK) {
+    reconnect_due_us = 0;
+    ESP_LOGE(TAG, "Failed to schedule reconnect: %s", esp_err_to_name(err));
+    return;
+  }
+
+  reconnect_pending = true;
+  ESP_LOGI(TAG, "Scheduled reconnect in %u ms", static_cast<unsigned>(reconnect_delay_ms));
+
+  reconnect_delay_ms = std::min(reconnect_delay_ms * 2, RECONNECT_MAX_DELAY_MS);
+}
+
+static void cancelReconnect()
+{
+  reconnect_pending = false;
+  reconnect_due_us = 0;
+
+  esp_err_t err = esp_timer_stop(reconnect_timer);
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    ESP_LOGE(TAG, "Failed to cancel reconnect timer: %s", esp_err_to_name(err));
+  }
+}
+
+static void attemptConnection()
+{
+    portENTER_CRITICAL(&status_lock);
+    ++connection_generation;
+    current_status.link = NETWORK_CONNECTING;
+    current_status.ip = NO_IP;
+    current_status.disconnect_reason = NO_DISCONNECT_REASON;
+    current_status.ssid[0] = '\0';
+    current_status.rssi = 0;
+    current_status.rssi_valid = false;
+    portEXIT_CRITICAL(&status_lock);
+
+    esp_err_t err = esp_wifi_connect();
+    if (err != ESP_OK) {
+      portENTER_CRITICAL(&status_lock);
+      current_status.link = NETWORK_OFFLINE;
+      portEXIT_CRITICAL(&status_lock);
+
+      ESP_LOGE(TAG, "Failed to request connection: %s", esp_err_to_name(err));
+      scheduleReconnect();
+    }
+}
+
+static void processReconnect()
+{
+  if (!normal_connection_enabled ||
+      !reconnect_pending ||
+      esp_timer_get_time() < reconnect_due_us)
+  {
+    return;
+  }
+
+  cancelReconnect();
+
+  NETWORK_STATUS status = NetworkGetStatus();
+  if (status.link != NETWORK_OFFLINE) {
+    return;
+  }
+
+  attemptConnection();
+}
+
+static esp_err_t startSavedNetwork();
+
 static void networkEventHandler(
   void *arg,
   esp_event_base_t event_base,
   int32_t event_id,
   void *event_data)
 {
-  esp_err_t err;
-
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
     ESP_LOGI(TAG, "Wi-Fi started, attempting to connect to saved network");
-    err = esp_wifi_connect();
-    if (err != ESP_OK) {
-      portENTER_CRITICAL(&status_lock);
-      current_status.link = NETWORK_OFFLINE;
-      current_status.ip = NO_IP;
-      current_status.disconnect_reason = NO_DISCONNECT_REASON;
-      current_status.ssid[0] = '\0';
-      current_status.rssi = 0;
-      current_status.rssi_valid = false;
-      portEXIT_CRITICAL(&status_lock);
-
-      ESP_LOGE(TAG, "Failed to connect to Wi-Fi: %s", esp_err_to_name(err));
+    if (normal_connection_enabled) {
+      attemptConnection();
     }
   }
 
@@ -99,6 +190,9 @@ static void networkEventHandler(
     current_status.disconnect_reason = NO_DISCONNECT_REASON;
     portEXIT_CRITICAL(&status_lock);
 
+    cancelReconnect();
+    reconnect_delay_ms = RECONNECT_INITIAL_DELAY_MS;
+
     ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&got_ip_event->ip_info.ip));
   }
 
@@ -126,10 +220,16 @@ static void networkEventHandler(
     current_status.rssi_valid = false;
     portEXIT_CRITICAL(&status_lock);
 
+    scheduleReconnect();
+
     ESP_LOGI(TAG, "Wi-Fi disconnected, reason: %d", reason);
   }
 
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_STOP) {
+    normal_connection_enabled = false;
+    cancelReconnect();
+    reconnect_delay_ms = RECONNECT_INITIAL_DELAY_MS;
+
     portENTER_CRITICAL(&status_lock);
     ++connection_generation;
     current_status.link = NETWORK_OFFLINE;
@@ -143,8 +243,29 @@ static void networkEventHandler(
     ESP_LOGI(TAG, "Wi-Fi stopped");
   }
 
+  if (event_base == NETWORK_EVENT && event_id == NETWORK_EVENT_CONNECT_SAVED) {
+    if (normal_connection_enabled) {
+      return;
+    }
+
+    cancelReconnect();
+    reconnect_delay_ms = RECONNECT_INITIAL_DELAY_MS;
+    normal_connection_enabled = true;
+    esp_err_t start_err = startSavedNetwork();
+    if (start_err != ESP_OK) {
+      normal_connection_enabled = false;
+      cancelReconnect();
+      ESP_LOGE(TAG, "Failed to start saved network: %s", esp_err_to_name(start_err));
+    }
+  }
+
   if (event_base == NETWORK_EVENT && event_id == NETWORK_EVENT_REFRESH_RSSI) {
     NetworkRefreshRssi();
+    processReconnect();
+  }
+
+  if (event_base == NETWORK_EVENT && event_id == NETWORK_EVENT_RECONNECT) {
+    processReconnect();
   }
 }
 
@@ -176,9 +297,15 @@ esp_err_t NetworkInit()
   bool wifi_handler_registered = false;
   bool ip_handler_registered = false;
   bool network_handler_registered = false;
+  bool reconnect_timer_created = false;
   bool rssi_timer_created = false;
 
   auto rollback = [&](esp_err_t original_error) -> esp_err_t {
+    if (reconnect_timer_created) {
+      ESP_ERROR_CHECK(esp_timer_delete(reconnect_timer));
+      reconnect_timer = nullptr;
+    }
+
     if (rssi_timer_created) {
       ESP_ERROR_CHECK(esp_timer_delete(rssi_timer));
       rssi_timer = nullptr;
@@ -311,6 +438,20 @@ esp_err_t NetworkInit()
   }
   rssi_timer_created = true;
 
+  esp_timer_create_args_t reconnect_timer_args = {
+    .callback = &reconnectTimerCallback,
+    .arg = nullptr,
+    .dispatch_method = ESP_TIMER_TASK,
+    .name = "network_reconnect",
+    .skip_unhandled_events = true,
+  };
+  err = esp_timer_create(&reconnect_timer_args, &reconnect_timer);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to create reconnect timer: %s", esp_err_to_name(err));
+    return rollback(err);
+  }
+  reconnect_timer_created = true;
+
   err = esp_timer_start_periodic(
     rssi_timer,
     static_cast<uint64_t>(NETWORK_RSSI_INTERVAL) * 1000ULL
@@ -343,6 +484,13 @@ esp_err_t NetworkConnectSaved() {
     return ESP_ERR_NOT_FOUND;
   }
 
+  return esp_event_post(NETWORK_EVENT, NETWORK_EVENT_CONNECT_SAVED, nullptr, 0, 0);
+}
+
+static esp_err_t startSavedNetwork()
+{
+  esp_err_t err;
+
   err = esp_netif_set_hostname(station_interface, OperatingParameters.DeviceName);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set hostname: %s", esp_err_to_name(err));
@@ -369,11 +517,6 @@ esp_err_t NetworkConnectSaved() {
   if (err != ESP_OK) {
     portENTER_CRITICAL(&status_lock);
     current_status.link = NETWORK_OFFLINE;
-    current_status.ip = NO_IP;
-    current_status.disconnect_reason = NO_DISCONNECT_REASON;
-    current_status.ssid[0] = '\0';
-    current_status.rssi = 0;
-    current_status.rssi_valid = false;
     portEXIT_CRITICAL(&status_lock);
 
     ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(err));
