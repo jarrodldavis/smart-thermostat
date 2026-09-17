@@ -3,6 +3,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include <algorithm>
 
@@ -11,8 +12,18 @@ static const char *TAG = "NETWORK";
 static bool netif_initialized = false;
 static bool network_initialized = false;
 static esp_netif_t *station_interface = nullptr;
+
+ESP_EVENT_DEFINE_BASE(NETWORK_EVENT);
+
+enum {
+  NETWORK_EVENT_REFRESH_RSSI
+};
+
 static esp_event_handler_instance_t wifi_event_handler_instance;
 static esp_event_handler_instance_t ip_event_handler_instance;
+static esp_event_handler_instance_t network_event_handler_instance;
+
+static esp_timer_handle_t rssi_timer = nullptr;
 
 static uint32_t connection_generation = 0;
 static portMUX_TYPE status_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -26,6 +37,11 @@ static NETWORK_STATUS current_status = {
   .rssi = 0,
   .rssi_valid = false
 };
+
+static void rssiTimerCallback(void *arg)
+{
+  (void)esp_event_post(NETWORK_EVENT, NETWORK_EVENT_REFRESH_RSSI, nullptr, 0, 0);
+}
 
 static void networkEventHandler(
   void *arg,
@@ -70,6 +86,8 @@ static void networkEventHandler(
     portEXIT_CRITICAL(&status_lock);
 
     ESP_LOGI(TAG, "Wi-Fi connected");
+
+    NetworkRefreshRssi();
   }
 
   if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -124,6 +142,10 @@ static void networkEventHandler(
 
     ESP_LOGI(TAG, "Wi-Fi stopped");
   }
+
+  if (event_base == NETWORK_EVENT && event_id == NETWORK_EVENT_REFRESH_RSSI) {
+    NetworkRefreshRssi();
+  }
 }
 
 NETWORK_STATUS NetworkGetStatus()
@@ -153,8 +175,24 @@ esp_err_t NetworkInit()
   bool wifi_initialized = false;
   bool wifi_handler_registered = false;
   bool ip_handler_registered = false;
+  bool network_handler_registered = false;
+  bool rssi_timer_created = false;
 
   auto rollback = [&](esp_err_t original_error) -> esp_err_t {
+    if (rssi_timer_created) {
+      ESP_ERROR_CHECK(esp_timer_delete(rssi_timer));
+      rssi_timer = nullptr;
+    }
+
+    if (network_handler_registered) {
+      ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
+        NETWORK_EVENT,
+        ESP_EVENT_ANY_ID,
+        network_event_handler_instance
+      ));
+      network_event_handler_instance = nullptr;
+    }
+
     if (ip_handler_registered) {
       ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
         IP_EVENT,
@@ -245,6 +283,42 @@ esp_err_t NetworkInit()
     return rollback(err);
   }
   ip_handler_registered = true;
+
+  err = esp_event_handler_instance_register(
+    NETWORK_EVENT,
+    ESP_EVENT_ANY_ID,
+    &networkEventHandler,
+    nullptr,
+    &network_event_handler_instance
+  );
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to register network event handler: %s", esp_err_to_name(err));
+    return rollback(err);
+  }
+  network_handler_registered = true;
+
+  esp_timer_create_args_t rssi_timer_args = {
+    .callback = &rssiTimerCallback,
+    .arg = nullptr,
+    .dispatch_method = ESP_TIMER_TASK,
+    .name = "network_rssi",
+    .skip_unhandled_events = true,
+  };
+  err = esp_timer_create(&rssi_timer_args, &rssi_timer);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to create RSSI timer: %s", esp_err_to_name(err));
+    return rollback(err);
+  }
+  rssi_timer_created = true;
+
+  err = esp_timer_start_periodic(
+    rssi_timer,
+    static_cast<uint64_t>(NETWORK_RSSI_INTERVAL) * 1000ULL
+  );
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to start RSSI timer: %s", esp_err_to_name(err));
+    return rollback(err);
+  }
 
   network_initialized = true;
   return ESP_OK;
