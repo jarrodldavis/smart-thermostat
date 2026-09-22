@@ -164,7 +164,7 @@ extern int64_t ui_WifiStatusLabel_timestamp;
 #endif
 #define MOTION_TIMEOUT 10000
 #define WIFI_CONNECT_INTERVAL 30000
-#define NETWORK_RSSI_INTERVAL 10000
+#define NETWORK_TICK_INTERVAL 10000
 #define UPDATE_TIME_INTERVAL 300000  //60000
 #define UI_TEXT_DELAY 3000
 
@@ -273,7 +273,6 @@ void WiFi_ScanSSID( void );
 NETWORK_STATUS NetworkGetStatus();
 esp_err_t NetworkInit();
 esp_err_t NetworkConnectSaved();
-void NetworkRefreshRssi();
 uint16_t NetworkRssiToPercent(int rssi_i);
 
 // TFT
