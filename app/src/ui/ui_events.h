@@ -36,6 +36,7 @@ void ShowQrOnScreen(lv_event_t * e);
 void saveMqttSettings(lv_event_t * e);
 void saveDeviceName(lv_event_t * e);
 void tftCountdown(lv_event_t * e);
+void InitProvisioningUi(void);
 
 #ifdef __cplusplus
 } /*extern "C"*/

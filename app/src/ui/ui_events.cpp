@@ -12,6 +12,106 @@
 #define screenWidth 320
 TaskHandle_t ntScanTaskHandler = NULL;
 
+static lv_obj_t *provisionPanel;
+static lv_obj_t *provisionQr;
+static lv_obj_t *provisionStatus;
+static lv_obj_t *provisionService;
+static lv_obj_t *provisionInstructions;
+
+static void refreshProvisioningUi(lv_timer_t *)
+{
+  if (!provisionPanel || lv_obj_has_flag(provisionPanel, LV_OBJ_FLAG_HIDDEN)) return;
+  lv_label_set_text(provisionStatus, ProvisioningGetStatus());
+  lv_label_set_text_fmt(provisionService, "%s  (%s)", ProvisioningGetServiceName(),
+                        ProvisioningGetTransport() == PROVISIONING_BLE ? "BLE" : "SoftAP");
+  const char *payload = ProvisioningGetQrPayload();
+  if (payload && payload[0]) lv_qrcode_update(provisionQr, payload, strlen(payload));
+}
+
+static void showProvisioning(lv_event_t *)
+{
+  lv_obj_clear_flag(provisionPanel, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(provisionPanel);
+  refreshProvisioningUi(nullptr);
+}
+
+static void startBleProvisioning(lv_event_t *)
+{
+  ProvisioningStart(PROVISIONING_BLE);
+  refreshProvisioningUi(nullptr);
+}
+
+static void startSoftApProvisioning(lv_event_t *)
+{
+  ProvisioningStart(PROVISIONING_SOFTAP);
+  refreshProvisioningUi(nullptr);
+}
+
+static void stopProvisioning(lv_event_t *)
+{
+  ProvisioningStop();
+  refreshProvisioningUi(nullptr);
+}
+
+static void hideProvisioning(lv_event_t *)
+{
+  lv_obj_add_flag(provisionPanel, LV_OBJ_FLAG_HIDDEN);
+}
+
+static lv_obj_t *makeProvisionButton(lv_obj_t *parent, const char *text, lv_coord_t x,
+                                     lv_event_cb_t callback)
+{
+  lv_obj_t *button = lv_btn_create(parent);
+  lv_obj_set_size(button, 68, 32);
+  lv_obj_set_pos(button, x, 202);
+  lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *label = lv_label_create(button);
+  lv_label_set_text(label, text);
+  lv_obj_center(label);
+  return button;
+}
+
+void InitProvisioningUi(void)
+{
+  lv_obj_t *phoneButton = lv_btn_create(ui_WifiConfig);
+  lv_obj_set_size(phoneButton, 72, 34);
+  lv_obj_align(phoneButton, LV_ALIGN_TOP_MID, -5, 42);
+  lv_obj_add_event_cb(phoneButton, showProvisioning, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *phoneLabel = lv_label_create(phoneButton);
+  lv_label_set_text(phoneLabel, "Phone");
+  lv_obj_center(phoneLabel);
+
+  provisionPanel = lv_obj_create(ui_WifiConfig);
+  lv_obj_set_size(provisionPanel, 320, 240);
+  lv_obj_center(provisionPanel);
+  lv_obj_clear_flag(provisionPanel, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_color(provisionPanel, lv_color_white(), 0);
+  provisionQr = lv_qrcode_create(provisionPanel, 128, lv_color_black(), lv_color_white());
+  lv_obj_align(provisionQr, LV_ALIGN_TOP_MID, 0, 2);
+  provisionInstructions = lv_label_create(provisionPanel);
+  lv_obj_set_width(provisionInstructions, 300);
+  lv_obj_set_style_text_font(provisionInstructions, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_align(provisionInstructions, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_text(provisionInstructions,
+                    "Open the ESP Provisioning app\n"
+                    "Provision New Device > Scan QR Code");
+  lv_obj_align(provisionInstructions, LV_ALIGN_TOP_MID, 0, 134);
+  provisionService = lv_label_create(provisionPanel);
+  lv_obj_set_style_text_font(provisionService, &lv_font_montserrat_14, 0);
+  lv_obj_align(provisionService, LV_ALIGN_TOP_MID, 0, 166);
+  provisionStatus = lv_label_create(provisionPanel);
+  lv_obj_set_width(provisionStatus, 300);
+  lv_obj_set_style_text_font(provisionStatus, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_align(provisionStatus, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(provisionStatus, LV_ALIGN_TOP_MID, 0, 183);
+  makeProvisionButton(provisionPanel, "BLE", 3, startBleProvisioning);
+  makeProvisionButton(provisionPanel, "SoftAP", 81, startSoftApProvisioning);
+  makeProvisionButton(provisionPanel, "Stop", 159, stopProvisioning);
+  makeProvisionButton(provisionPanel, "Back", 237, hideProvisioning);
+  lv_timer_create(refreshProvisioningUi, 500, nullptr);
+  lv_obj_add_flag(provisionPanel, LV_OBJ_FLAG_HIDDEN);
+}
+
 void tftUpdateTempSet(lv_event_t * e)
 {
   updateHvacSetTemp((float)(lv_arc_get_value(ui_TempArc)) / 10.0);
@@ -217,7 +317,6 @@ void tftSetNewWifi(lv_event_t * e)
   if (strlen(WifiCreds.ssid) > 0)
   {
     strcpy (WifiCreds.password, lv_textarea_get_text(ui_PSK));
-    printf ("*** [tftSetNewWifi] WifiCreds.password = %s\n", WifiCreds.password);
     // Save the new wifi credentials to NVRAM
     setWifiCreds(); //Store locally (in Thermostat NVS)
     WifiSetCredentials(WifiCreds.ssid, WifiCreds.password);
@@ -502,6 +601,11 @@ void tftCountdown(lv_event_t * e)
 {
   int n = 5;  // Countdown limit
   char buf[8];
+
+  // The countdown deliberately keeps the UI alive for several seconds.
+  // Prevent socket shutdowns during that interval from launching a Wi-Fi
+  // reconnect task which can race esp_restart().
+  WifiPrepareForReboot();
 
 #ifdef MATTER_ENABLED
   OperatingParameters.MatterEnabled = false;

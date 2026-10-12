@@ -65,6 +65,7 @@ static const char *TAG = "WIFI";
 
 bool wifiScanActive = false;
 static bool wifiConnecting = false;
+static volatile bool wifiRebooting = false;
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group = NULL;
@@ -312,6 +313,17 @@ static void event_handler(void* arg, esp_event_base_t event_base,
   ESP_LOGI(TAG, "event_handler()");
 #endif
 
+  // A deliberate ESP restart tears down sockets and Wi-Fi underneath the
+  // event loop. Do not interpret those disconnect events as a request to
+  // rebuild the driver while the restart is already in progress.
+  if (wifiRebooting)
+  {
+    WifiStatus.Connected = false;
+    OperatingParameters.wifiConnected = false;
+    wifiConnecting = false;
+    return;
+  }
+
   if (wifiScanActive)
   {
     ESP_LOGE(TAG, "  SSID scan active - aborting wifi connect (event_id = %d)", event_id);
@@ -440,6 +452,7 @@ void WifiSetCredentials(const char *ssid, const char *pass)
   {
     ESP_LOGD(TAG, "- Calling esp_wifi_deinit()");
     esp_wifi_deinit();
+    ProvisioningNotifyWifiDeinit();
     WifiStatus.driver_started = false;
     WifiStatus.if_init = false;
   }
@@ -464,6 +477,8 @@ void WifiDeregisterEventCallbacks()
     /* The event will not be processed after unregister */
     // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
     // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+    esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip);
+    esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id);
 
     vEventGroupDelete(s_wifi_event_group);
     s_wifi_event_group = NULL;
@@ -570,7 +585,6 @@ bool WifiStart(const char *hostname, const char *ssid, const char *pass)
   {
     ESP_LOGI(TAG, "  Wifi driver not started; Calling init and create funcs");
     WifiStatus.driver_started = true;
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_interface_sta = esp_netif_create_default_wifi_sta();
   }
 
@@ -645,8 +659,7 @@ bool WifiStart(const char *hostname, const char *ssid, const char *pass)
    * happened. */
   if (bits & WIFI_CONNECTED_BIT)
   {
-    ESP_LOGI(TAG, "Connected to AP SSID: %s Pre-shared key: %c%c****", 
-      WifiCreds.ssid, WifiCreds.password[0], WifiCreds.password[1]);
+    ESP_LOGI(TAG, "Connected to AP SSID: %s", WifiCreds.ssid);
     WifiStatus.Connected = true;
     ret_value = ESP_OK;
     // Start SNTP service
@@ -654,14 +667,12 @@ bool WifiStart(const char *hostname, const char *ssid, const char *pass)
   }
   else if (bits & WIFI_FAIL_BIT)
   {
-    ESP_LOGE(TAG, "Failed to connect to SSID:%s, Pre-shared key: %c%c****", 
-      WifiCreds.ssid, WifiCreds.password[0], WifiCreds.password[1]);
+    ESP_LOGE(TAG, "Failed to connect to SSID: %s", WifiCreds.ssid);
     ret_value = ESP_FAIL;
   }
   else if (bits & WIFI_FAIL_ABORTED)
   {
-    ESP_LOGE(TAG, "Aborted connect to SSID:%s, Pre-shared key: %c%c****", 
-      WifiCreds.ssid, WifiCreds.password[0], WifiCreds.password[1]);
+    ESP_LOGE(TAG, "Aborted connect to SSID: %s", WifiCreds.ssid);
     ret_value = ESP_FAIL;
   }
   else
@@ -691,9 +702,25 @@ bool WifiStarted()
   return WifiStatus.wifi_started;
 }
 
+void WifiAdoptNetwork(esp_netif_t *sta_netif)
+{
+  esp_netif_interface_sta = sta_netif;
+  WifiStatus.driver_started = true;
+  WifiStatus.if_init = true;
+  WifiStatus.wifi_started = true;
+}
+
 bool WifiRestartPending()
 {
-  return WifiStatus.reconnect_requested;
+  return !wifiRebooting && WifiStatus.reconnect_requested;
+}
+
+void WifiPrepareForReboot()
+{
+  ESP_LOGI(TAG, "Suppressing Wi-Fi reconnects for system restart");
+  wifiRebooting = true;
+  wifiConnecting = false;
+  WifiStatus.reconnect_requested = false;
 }
 
 bool WifiConnected()
@@ -724,7 +751,6 @@ void WifiDeinit()
   {
     ESP_LOGD(TAG, "- Taking down network stack");
     esp_netif_destroy_default_wifi(esp_netif_interface_sta);
-    esp_event_loop_delete_default();
     esp_wifi_deinit();
     WifiStatus.driver_started = false;
     WifiStatus.if_init = false;
@@ -812,6 +838,12 @@ void networkReconnectTask(void *pvParameters)
 
 void startReconnectTask()
 {
+  if (wifiRebooting)
+  {
+    ESP_LOGI(TAG, "Network reconnect suppressed: system restart pending");
+    return;
+  }
+
 #ifdef MATTER_ENABLED
   if (OperatingParameters.MatterStarted)
   {

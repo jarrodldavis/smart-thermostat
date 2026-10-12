@@ -137,9 +137,21 @@ typedef struct
 
 } WIFI_STATUS;
 
+typedef enum { PROVISIONING_BLE = 0, PROVISIONING_SOFTAP } PROVISIONING_TRANSPORT;
+typedef enum {
+    PROVISIONING_IDLE = 0,
+    PROVISIONING_STARTING,
+    PROVISIONING_ADVERTISING,
+    PROVISIONING_RECEIVING,
+    PROVISIONING_CONNECTING,
+    PROVISIONING_SUCCEEDED,
+    PROVISIONING_FAILED
+} PROVISIONING_STATE;
+
 
 extern OPERATING_PARAMETERS OperatingParameters;
 extern WIFI_CREDS WifiCreds;
+extern WIFI_STATUS WifiStatus;
 extern int64_t ui_WifiStatusLabel_timestamp;
 
 #ifdef MQTT_ENABLED
@@ -237,6 +249,7 @@ bool eepromUpdateArbMode(const char *key, HVAC_MODE mode);
 
 // HTTP Server
 void webStart();
+void webStop();
 
 // Routine to control wifi
 void WifiSetHostname(const char *hostname);
@@ -244,13 +257,28 @@ void WifiSetCredentials(const char *ssid, const char *pass);
 bool WifiStart(const char *hostname, const char *ssid, const char *pass);
 bool WifiStarted();
 bool WifiRestartPending();
+void WifiPrepareForReboot();
 bool WifiConnected();
 void WifiDisconnect();
+void WifiDeinit();
+void WifiAdoptNetwork(esp_netif_t *sta_netif);
 void startReconnectTask();
 uint16_t WifiSignal();
 char *WifiAddress();
 char *Get_WiFiSSID_DD_List( void );
 void WiFi_ScanSSID( void );
+
+// ESP-IDF unified provisioning
+void ProvisioningInit();
+bool ProvisioningStart(PROVISIONING_TRANSPORT transport);
+void ProvisioningStop();
+bool ProvisioningActive();
+PROVISIONING_STATE ProvisioningGetState();
+PROVISIONING_TRANSPORT ProvisioningGetTransport();
+const char *ProvisioningGetStatus();
+const char *ProvisioningGetServiceName();
+const char *ProvisioningGetQrPayload();
+void ProvisioningNotifyWifiDeinit();
 
 // TFT
 void tftInit();

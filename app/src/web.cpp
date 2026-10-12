@@ -48,6 +48,7 @@ static const char *TAG = "WEB";
 
 static char html[2200];
 static char xml[800];
+static httpd_handle_t webServer = NULL;
 
 float doTempUp(void)
 {
@@ -358,26 +359,35 @@ httpd_uri_t uri_update = {
 
 void webStart()
 {
+  if (webServer != NULL)
+    return;
   if (!WifiConnected())
   {
     ESP_LOGW (TAG, "***  WARNING: Starting web server while wifi down!!  *****");
   }
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  httpd_handle_t server = NULL;
-
-  if (httpd_start(&server, &config) == ESP_OK)
+  if (httpd_start(&webServer, &config) == ESP_OK)
   {
-    httpd_register_uri_handler(server, &uri_get);
-    httpd_register_uri_handler(server, &uri_xml);
-    httpd_register_uri_handler(server, &uri_button);
-    httpd_register_uri_handler(server, &uri_upload);
-    httpd_register_uri_handler(server, &uri_update);
+    httpd_register_uri_handler(webServer, &uri_get);
+    httpd_register_uri_handler(webServer, &uri_xml);
+    httpd_register_uri_handler(webServer, &uri_button);
+    httpd_register_uri_handler(webServer, &uri_upload);
+    httpd_register_uri_handler(webServer, &uri_update);
   }
 
-  if (server == NULL)
+  if (webServer == NULL)
   {
     ESP_LOGE (TAG, "** FAILED TO START WEB SERVER **");
     OperatingParameters.Errors.systemErrors++;
+  }
+}
+
+void webStop()
+{
+  if (webServer != NULL)
+  {
+    httpd_stop(webServer);
+    webServer = NULL;
   }
 }

@@ -384,7 +384,7 @@ void doConfiguration(int sock)
   if ((len) && (len < sizeof(buffer)))
     strcpy(WifiCreds.ssid, buffer);
 
-  telnet_esp32_printf("WIFI Password or PSK [%s]: ", WifiCreds.password);
+  telnet_esp32_printf("WIFI Password or PSK [%s]: ", strlen(WifiCreds.password) ? "configured" : "not set");
   len = recv(sock, buffer, sizeof(buffer), 0);
   len -= 2;
   buffer[len] = '\0';

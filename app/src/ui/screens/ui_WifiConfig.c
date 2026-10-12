@@ -140,4 +140,6 @@ lv_obj_add_event_cb(ui_SaveBtn, ui_event_SaveBtn, LV_EVENT_ALL, NULL);
 lv_obj_add_event_cb(ui_CancelBtn, ui_event_CancelBtn, LV_EVENT_ALL, NULL);
 lv_obj_add_event_cb(ui_WifiStatusLabel, ui_event_WifiStatusLabel, LV_EVENT_ALL, NULL);
 
+InitProvisioningUi();
+
 }

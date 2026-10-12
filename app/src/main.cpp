@@ -24,6 +24,7 @@
 
 #include "thermostat.hpp"
 #include "esp_timer.h"
+#include "esp_event.h"
 #include "version.h"
 #include "logger.h"
 
@@ -81,11 +82,19 @@ void app_main()
 #endif
 
   // Start wifi
-  ESP_LOGI (TAG, "Starting wifi (\"%s\", \"%s\")", WifiCreds.ssid, WifiCreds.password);
+  ESP_LOGI (TAG, "Starting wifi for SSID \"%s\"", WifiCreds.ssid);
   ESP_ERROR_CHECK(esp_netif_init());
-  OperatingParameters.wifiConnected = 
-    // wifiStart(WifiCreds.hostname, WifiCreds.ssid, WifiCreds.password);
-    WifiStart(OperatingParameters.DeviceName, WifiCreds.ssid, WifiCreds.password);
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
+  ProvisioningInit();
+  if (strlen(WifiCreds.ssid) == 0)
+  {
+    OperatingParameters.wifiConnected = false;
+    ProvisioningStart(PROVISIONING_BLE);
+  }
+  else
+  {
+    OperatingParameters.wifiConnected = WifiStart(OperatingParameters.DeviceName, WifiCreds.ssid, WifiCreds.password);
+  }
 
 #ifdef MQTT_ENABLED
   // Start Matter
