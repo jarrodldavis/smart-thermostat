@@ -25,6 +25,8 @@ static char s_pop[17];
 static char s_qr_payload[192];
 static bool s_initialized;
 static bool s_manager_initialized;
+static bool s_session_end_pending;
+static bool s_session_end_cleanup;
 static bool s_network_initialized;
 static esp_netif_t *s_sta_netif;
 static esp_netif_t *s_ap_netif;
@@ -190,8 +192,17 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
         set_state(PROVISIONING_SUCCEEDED, "Provisioning complete");
         break;
       case WIFI_PROV_END: {
-        if (s_manager_initialized) {
-          s_manager_initialized = false;
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        if (!s_session_end_pending || s_session_end_cleanup) {
+          xSemaphoreGive(s_lock);
+          break;
+        }
+        s_session_end_cleanup = true;
+        const bool manager_initialized = s_manager_initialized;
+        s_manager_initialized = false;
+        xSemaphoreGive(s_lock);
+
+        if (manager_initialized) {
           wifi_prov_mgr_deinit();
         }
         if (s_ap_netif) {
@@ -211,13 +222,22 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
         // wifi_prov_mgr_deinit() posts this event to the default event loop.
         // Publish completion only after all old-session cleanup has run so a
         // transport switch cannot expose a new manager to this callback.
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        s_session_end_pending = false;
+        s_session_end_cleanup = false;
         xEventGroupSetBits(s_work_events, PROVISION_SESSION_ENDED);
+        xSemaphoreGive(s_lock);
         break;
       }
       default:
         break;
     }
-  } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP && s_manager_initialized) {
+  } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    const bool manager_initialized = s_manager_initialized;
+    xSemaphoreGive(s_lock);
+    if (!manager_initialized) return;
+
     const ip_event_got_ip_t *event = static_cast<const ip_event_got_ip_t *>(event_data);
     WifiStatus.ip = event->ip_info.ip;
     WifiStatus.Connected = true;
@@ -247,15 +267,20 @@ void ProvisioningInit()
 
 static bool stop_session(bool resume_network)
 {
-  const bool was_active = s_manager_initialized || ProvisioningActive();
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  const bool manager_initialized = s_manager_initialized;
+  const bool end_pending = s_session_end_pending;
+  s_manager_initialized = false;
+  xSemaphoreGive(s_lock);
+  const bool was_active = manager_initialized || ProvisioningActive();
 
-  if (s_manager_initialized) {
+  if (manager_initialized) {
     // The END event is queued asynchronously. Wait for its handler before
     // returning so ProvisioningStart() can safely initialize another scheme.
-    xEventGroupClearBits(s_work_events, PROVISION_SESSION_ENDED);
-    s_manager_initialized = false;
     wifi_prov_mgr_stop_provisioning();
     wifi_prov_mgr_deinit();
+  }
+  if (end_pending) {
     xEventGroupWaitBits(s_work_events, PROVISION_SESSION_ENDED,
                         pdTRUE, pdTRUE, portMAX_DELAY);
   }
@@ -372,7 +397,12 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     set_state(PROVISIONING_FAILED, "Could not initialize provisioning");
     return false;
   }
+  xSemaphoreTake(s_lock, portMAX_DELAY);
   s_manager_initialized = true;
+  s_session_end_pending = true;
+  s_session_end_cleanup = false;
+  xEventGroupClearBits(s_work_events, PROVISION_SESSION_ENDED);
+  xSemaphoreGive(s_lock);
 
   const char *transport_name = transport == PROVISIONING_BLE ? "ble" : "softap";
   xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -385,8 +415,32 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
                                          transport == PROVISIONING_SOFTAP ? s_pop : nullptr);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Provisioning start failed: %s", esp_err_to_name(err));
-    wifi_prov_mgr_deinit();
-    s_manager_initialized = false;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    const bool cleanup_in_progress = s_session_end_cleanup;
+    const bool manager_initialized = s_manager_initialized;
+    if (!cleanup_in_progress) {
+      s_session_end_cleanup = true;
+      s_manager_initialized = false;
+    }
+    xSemaphoreGive(s_lock);
+
+    if (cleanup_in_progress) {
+      xEventGroupWaitBits(s_work_events, PROVISION_SESSION_ENDED,
+                          pdTRUE, pdTRUE, portMAX_DELAY);
+    } else {
+      if (manager_initialized) wifi_prov_mgr_deinit();
+      if (s_ap_netif) {
+        esp_netif_destroy_default_wifi(s_ap_netif);
+        s_ap_netif = nullptr;
+      }
+      xSemaphoreTake(s_lock, portMAX_DELAY);
+      // A failed start is not guaranteed to emit WIFI_PROV_END. Complete the
+      // session here and ignore any late END event.
+      s_session_end_pending = false;
+      xEventGroupSetBits(s_work_events, PROVISION_SESSION_ENDED);
+      s_session_end_cleanup = false;
+      xSemaphoreGive(s_lock);
+    }
     stop_worker();
     restore_normal_network(true);
     webStart();
