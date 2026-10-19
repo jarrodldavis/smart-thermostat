@@ -39,9 +39,7 @@ map_host_gid() {
 # container's own /dev filesystem.
 #
 
-if [[ -d $HOST_DEV/serial ]]; then
-    ln -sfn "$HOST_DEV/serial" /dev/serial
-fi
+ln -sfn "$HOST_DEV/serial" /dev/serial
 
 #
 # Discover the GIDs used by host serial devices.
