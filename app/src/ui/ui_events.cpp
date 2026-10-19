@@ -17,6 +17,7 @@ static lv_obj_t *provisionQr;
 static lv_obj_t *provisionStatus;
 static lv_obj_t *provisionService;
 static lv_obj_t *provisionInstructions;
+static char renderedQrPayload[sizeof(PROVISIONING_SNAPSHOT::qr_payload)];
 
 static void refreshProvisioningUi(lv_timer_t *)
 {
@@ -26,8 +27,12 @@ static void refreshProvisioningUi(lv_timer_t *)
   lv_label_set_text(provisionStatus, snapshot.status);
   lv_label_set_text_fmt(provisionService, "%s  (%s)", snapshot.service_name,
                         snapshot.transport == PROVISIONING_BLE ? "BLE" : "SoftAP");
-  if (snapshot.qr_payload[0])
-    lv_qrcode_update(provisionQr, snapshot.qr_payload, strlen(snapshot.qr_payload));
+  if (snapshot.qr_payload[0] && strcmp(snapshot.qr_payload, renderedQrPayload) != 0) {
+    if (lv_qrcode_update(provisionQr, snapshot.qr_payload,
+                         strlen(snapshot.qr_payload)) == LV_RES_OK) {
+      strlcpy(renderedQrPayload, snapshot.qr_payload, sizeof(renderedQrPayload));
+    }
+  }
 }
 
 static void showProvisioning(lv_event_t *)
