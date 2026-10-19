@@ -34,6 +34,21 @@ static TaskHandle_t s_worker_task;
 #define PROVISION_WORK_CONNECTED  BIT1
 #define PROVISION_WORK_STOP       BIT2
 #define PROVISION_WORK_STOPPED    BIT3
+#define PROVISION_SESSION_ENDED   BIT4
+
+static void mark_disconnected(bool reconnect)
+{
+  WifiStatus.Connected = false;
+  WifiStatus.ip.addr = 0;
+  WifiStatus.reconnect_requested = reconnect && strlen(WifiCreds.ssid) != 0;
+  OperatingParameters.wifiConnected = false;
+}
+
+static void restore_normal_network(bool reconnect)
+{
+  WifiRegisterEventCallbacks();
+  mark_disconnected(reconnect);
+}
 
 static void provisioning_worker(void *)
 {
@@ -174,6 +189,10 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
           WifiRegisterEventCallbacks();
           xEventGroupSetBits(s_work_events, PROVISION_WORK_CONNECTED);
         }
+        // wifi_prov_mgr_deinit() posts this event to the default event loop.
+        // Publish completion only after all old-session cleanup has run so a
+        // transport switch cannot expose a new manager to this callback.
+        xEventGroupSetBits(s_work_events, PROVISION_SESSION_ENDED);
         break;
       }
       default:
@@ -200,17 +219,53 @@ void ProvisioningInit()
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, provisioning_event, nullptr));
 }
 
+static bool stop_session(bool resume_network)
+{
+  const bool was_active = s_manager_initialized || ProvisioningActive();
+
+  if (s_manager_initialized) {
+    // The END event is queued asynchronously. Wait for its handler before
+    // returning so ProvisioningStart() can safely initialize another scheme.
+    xEventGroupClearBits(s_work_events, PROVISION_SESSION_ENDED);
+    s_manager_initialized = false;
+    wifi_prov_mgr_stop_provisioning();
+    wifi_prov_mgr_deinit();
+    xEventGroupWaitBits(s_work_events, PROVISION_SESSION_ENDED,
+                        pdTRUE, pdTRUE, portMAX_DELAY);
+  }
+  if (s_ap_netif) {
+    esp_netif_destroy_default_wifi(s_ap_netif);
+    s_ap_netif = nullptr;
+  }
+  stop_worker();
+  set_state(PROVISIONING_IDLE, "Not running");
+
+  if (resume_network && was_active) {
+    restore_normal_network(true);
+    // The HTTP server binds independently of the STA address and will be
+    // reachable once the normal reconnect task obtains an address.
+    webStart();
+  }
+  return was_active;
+}
+
 bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
 {
-  ProvisioningStop();
+  stop_session(false);
   // SoftAP provisioning owns the HTTP server port; stopping is harmless for BLE too.
   webStop();
+  // Provisioning owns Wi-Fi/IP events for the duration of the session. This
+  // is also required for repeated provisioning after a successful session.
+  WifiDeregisterEventCallbacks();
+  mark_disconnected(false);
   set_state(PROVISIONING_STARTING, "Starting provisioning...");
   xSemaphoreTake(s_lock, portMAX_DELAY);
   s_transport = transport;
   xSemaphoreGive(s_lock);
 
   if (!start_worker()) {
+    restore_normal_network(true);
+    webStart();
     set_state(PROVISIONING_FAILED, "Not enough memory for provisioning");
     return false;
   }
@@ -227,6 +282,8 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     if (!s_sta_netif || (transport == PROVISIONING_SOFTAP && !s_ap_netif) || wifi_err != ESP_OK) {
       ESP_LOGE(TAG, "Wi-Fi initialization failed: %s", esp_err_to_name(wifi_err));
       stop_worker();
+      restore_normal_network(true);
+      webStart();
       set_state(PROVISIONING_FAILED, "Could not initialize Wi-Fi");
       return false;
     }
@@ -236,6 +293,8 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     s_ap_netif = esp_netif_create_default_wifi_ap();
     if (!s_ap_netif) {
       stop_worker();
+      restore_normal_network(true);
+      webStart();
       set_state(PROVISIONING_FAILED, "Could not initialize SoftAP");
       return false;
     }
@@ -251,6 +310,8 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Manager initialization failed: %s", esp_err_to_name(err));
     stop_worker();
+    restore_normal_network(true);
+    webStart();
     set_state(PROVISIONING_FAILED, "Could not initialize provisioning");
     return false;
   }
@@ -270,6 +331,8 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     wifi_prov_mgr_deinit();
     s_manager_initialized = false;
     stop_worker();
+    restore_normal_network(true);
+    webStart();
     set_state(PROVISIONING_FAILED, "Could not start provisioning");
     return false;
   }
@@ -279,18 +342,7 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
 
 void ProvisioningStop()
 {
-  if (s_manager_initialized) {
-    s_manager_initialized = false;
-    wifi_prov_mgr_stop_provisioning();
-    wifi_prov_mgr_deinit();
-  }
-  if (s_ap_netif) {
-    esp_netif_destroy_default_wifi(s_ap_netif);
-    s_ap_netif = nullptr;
-  }
-  stop_worker();
-  set_state(PROVISIONING_IDLE, "Not running");
-  if (WifiConnected()) webStart();
+  stop_session(true);
 }
 
 void ProvisioningNotifyWifiDeinit()
@@ -306,7 +358,7 @@ bool ProvisioningActive()
   xSemaphoreTake(s_lock, portMAX_DELAY);
   const bool active = s_state == PROVISIONING_STARTING || s_state == PROVISIONING_ADVERTISING ||
                       s_state == PROVISIONING_RECEIVING || s_state == PROVISIONING_CONNECTING ||
-                      s_state == PROVISIONING_FAILED;
+                      (s_state == PROVISIONING_FAILED && s_manager_initialized);
   xSemaphoreGive(s_lock);
   return active;
 }

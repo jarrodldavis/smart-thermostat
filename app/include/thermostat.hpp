@@ -271,6 +271,7 @@ void WifiDisconnect();
 void WifiDeinit();
 void WifiAdoptNetwork(esp_netif_t *sta_netif);
 void WifiRegisterEventCallbacks();
+void WifiDeregisterEventCallbacks();
 void startReconnectTask();
 uint16_t WifiSignal();
 char *WifiAddress();
