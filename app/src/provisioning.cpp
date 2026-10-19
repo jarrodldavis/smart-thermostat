@@ -23,6 +23,7 @@ static char s_status[80] = "Not running";
 static char s_service_name[16];
 static char s_pop[17];
 static char s_qr_payload[192];
+static bool s_initialized;
 static bool s_manager_initialized;
 static bool s_network_initialized;
 static esp_netif_t *s_sta_netif;
@@ -126,21 +127,39 @@ static void set_state(PROVISIONING_STATE state, const char *status)
   if (s_lock) xSemaphoreGive(s_lock);
 }
 
-static void load_identity()
+static bool load_identity()
 {
   uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
+    ESP_LOGE(TAG, "Could not read device identity");
+    return false;
+  }
   snprintf(s_service_name, sizeof(s_service_name), "PROV_%02X%02X%02X", mac[3], mac[4], mac[5]);
 
   nvs_handle_t handle;
-  if (nvs_open("provision", NVS_READWRITE, &handle) != ESP_OK) return;
-  size_t length = sizeof(s_pop);
-  if (nvs_get_str(handle, "pop", s_pop, &length) != ESP_OK || strlen(s_pop) < 8) {
-    snprintf(s_pop, sizeof(s_pop), "%08" PRIX32, esp_random());
-    nvs_set_str(handle, "pop", s_pop);
-    nvs_commit(handle);
+  esp_err_t err = nvs_open("provision", NVS_READWRITE, &handle);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Could not open provisioning identity storage: %s", esp_err_to_name(err));
+    return false;
   }
+
+  char pop[sizeof(s_pop)] = {};
+  size_t length = sizeof(pop);
+  err = nvs_get_str(handle, "pop", pop, &length);
+  if (err != ESP_OK || strlen(pop) < 8) {
+    snprintf(pop, sizeof(pop), "%08" PRIX32, esp_random());
+    err = nvs_set_str(handle, "pop", pop);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Could not persist provisioning identity: %s", esp_err_to_name(err));
+      nvs_close(handle);
+      return false;
+    }
+  }
+
+  strlcpy(s_pop, pop, sizeof(s_pop));
   nvs_close(handle);
+  return true;
 }
 
 static void provisioning_event(void *, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -212,11 +231,18 @@ void ProvisioningInit()
 {
   if (!s_lock) s_lock = xSemaphoreCreateMutex();
   if (!s_work_events) s_work_events = xEventGroupCreate();
-  if (!s_lock || !s_work_events)
+  if (!s_lock || !s_work_events) {
     ESP_LOGE(TAG, "Could not allocate provisioning synchronization objects");
-  load_identity();
+    set_state(PROVISIONING_FAILED, "Not enough memory for provisioning");
+    return;
+  }
+  if (!load_identity()) {
+    set_state(PROVISIONING_FAILED, "Could not initialize device identity");
+    return;
+  }
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID, provisioning_event, nullptr));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, provisioning_event, nullptr));
+  s_initialized = true;
 }
 
 static bool stop_session(bool resume_network)
@@ -251,6 +277,11 @@ static bool stop_session(bool resume_network)
 
 bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
 {
+  if (!s_initialized) {
+    set_state(PROVISIONING_FAILED, "Provisioning is unavailable");
+    return false;
+  }
+
   stop_session(false);
   // SoftAP provisioning owns the HTTP server port; stopping is harmless for BLE too.
   webStop();
@@ -276,11 +307,37 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     // not WifiStarted(), or creating the provisioning STA netif will assert.
     if (WifiStatus.driver_started || WifiStatus.if_init) WifiDeinit();
     s_sta_netif = esp_netif_create_default_wifi_sta();
-    if (transport == PROVISIONING_SOFTAP) s_ap_netif = esp_netif_create_default_wifi_ap();
+    if (!s_sta_netif) {
+      ESP_LOGE(TAG, "Could not create provisioning STA interface");
+      stop_worker();
+      restore_normal_network(true);
+      webStart();
+      set_state(PROVISIONING_FAILED, "Could not initialize Wi-Fi");
+      return false;
+    }
+    if (transport == PROVISIONING_SOFTAP) {
+      s_ap_netif = esp_netif_create_default_wifi_ap();
+      if (!s_ap_netif) {
+        ESP_LOGE(TAG, "Could not create provisioning SoftAP interface");
+        esp_netif_destroy_default_wifi(s_sta_netif);
+        s_sta_netif = nullptr;
+        stop_worker();
+        restore_normal_network(true);
+        webStart();
+        set_state(PROVISIONING_FAILED, "Could not initialize SoftAP");
+        return false;
+      }
+    }
     wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
     esp_err_t wifi_err = esp_wifi_init(&wifi_config);
-    if (!s_sta_netif || (transport == PROVISIONING_SOFTAP && !s_ap_netif) || wifi_err != ESP_OK) {
+    if (wifi_err != ESP_OK) {
       ESP_LOGE(TAG, "Wi-Fi initialization failed: %s", esp_err_to_name(wifi_err));
+      if (s_ap_netif) {
+        esp_netif_destroy_default_wifi(s_ap_netif);
+        s_ap_netif = nullptr;
+      }
+      esp_netif_destroy_default_wifi(s_sta_netif);
+      s_sta_netif = nullptr;
       stop_worker();
       restore_normal_network(true);
       webStart();
@@ -342,6 +399,10 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
 
 void ProvisioningStop()
 {
+  if (!s_initialized) {
+    set_state(PROVISIONING_IDLE, "Not running");
+    return;
+  }
   stop_session(true);
 }
 
