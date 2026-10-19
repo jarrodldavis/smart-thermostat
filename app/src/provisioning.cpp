@@ -28,25 +28,76 @@ static bool s_network_initialized;
 static esp_netif_t *s_sta_netif;
 static esp_netif_t *s_ap_netif;
 static EventGroupHandle_t s_work_events;
+static TaskHandle_t s_worker_task;
 
 #define PROVISION_WORK_SAVE_CREDS BIT0
 #define PROVISION_WORK_CONNECTED  BIT1
+#define PROVISION_WORK_STOP       BIT2
+#define PROVISION_WORK_STOPPED    BIT3
 
 static void provisioning_worker(void *)
 {
-  for (;;) {
+  bool done = false;
+  while (!done) {
     EventBits_t work = xEventGroupWaitBits(s_work_events,
-        PROVISION_WORK_SAVE_CREDS | PROVISION_WORK_CONNECTED,
+        PROVISION_WORK_SAVE_CREDS | PROVISION_WORK_CONNECTED | PROVISION_WORK_STOP,
         pdTRUE, pdFALSE, portMAX_DELAY);
 
     if (work & PROVISION_WORK_SAVE_CREDS) setWifiCreds();
-    if (work & PROVISION_WORK_CONNECTED) {
+    if ((work & PROVISION_WORK_CONNECTED) && !(work & PROVISION_WORK_STOP)) {
       // These operations can perform DNS, HTTPS, JSON parsing, and allocate
       // server resources. They must never run on ESP-IDF's sys_evt task.
       initTimeSntp();
       webStart();
+      done = true;
     }
+    if (work & PROVISION_WORK_STOP) done = true;
   }
+
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  s_worker_task = nullptr;
+  xSemaphoreGive(s_lock);
+  xEventGroupSetBits(s_work_events, PROVISION_WORK_STOPPED);
+  vTaskDelete(nullptr);
+}
+
+static bool start_worker()
+{
+  if (!s_lock || !s_work_events) return false;
+
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  const bool already_running = s_worker_task != nullptr;
+  xSemaphoreGive(s_lock);
+  if (already_running) return true;
+
+  xEventGroupClearBits(s_work_events, PROVISION_WORK_SAVE_CREDS |
+      PROVISION_WORK_CONNECTED | PROVISION_WORK_STOP | PROVISION_WORK_STOPPED);
+
+  TaskHandle_t task = nullptr;
+  if (xTaskCreate(provisioning_worker, "ProvisioningWorker", 12288, nullptr,
+                  tskIDLE_PRIORITY + 1, &task) != pdPASS) {
+    ESP_LOGE(TAG, "Could not allocate provisioning worker");
+    return false;
+  }
+
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  s_worker_task = task;
+  xSemaphoreGive(s_lock);
+  return true;
+}
+
+static void stop_worker()
+{
+  if (!s_lock || !s_work_events) return;
+
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  const bool running = s_worker_task != nullptr;
+  xSemaphoreGive(s_lock);
+  if (!running) return;
+
+  xEventGroupSetBits(s_work_events, PROVISION_WORK_STOP);
+  xEventGroupWaitBits(s_work_events, PROVISION_WORK_STOPPED,
+                      pdTRUE, pdTRUE, portMAX_DELAY);
 }
 
 static void set_state(PROVISIONING_STATE state, const char *status)
@@ -128,11 +179,9 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
 void ProvisioningInit()
 {
   if (!s_lock) s_lock = xSemaphoreCreateMutex();
-  if (!s_work_events) {
-    s_work_events = xEventGroupCreate();
-    xTaskCreate(provisioning_worker, "ProvisioningWorker", 12288, nullptr,
-                tskIDLE_PRIORITY + 1, nullptr);
-  }
+  if (!s_work_events) s_work_events = xEventGroupCreate();
+  if (!s_lock || !s_work_events)
+    ESP_LOGE(TAG, "Could not allocate provisioning synchronization objects");
   load_identity();
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID, provisioning_event, nullptr));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, provisioning_event, nullptr));
@@ -146,6 +195,11 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
   set_state(PROVISIONING_STARTING, "Starting provisioning...");
   s_transport = transport;
 
+  if (!start_worker()) {
+    set_state(PROVISIONING_FAILED, "Not enough memory for provisioning");
+    return false;
+  }
+
   if (!s_network_initialized) {
     // A failed/timeout connection stops the radio but leaves the Wi-Fi driver
     // and default STA netif allocated. Tear down based on ownership state,
@@ -157,6 +211,7 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     esp_err_t wifi_err = esp_wifi_init(&wifi_config);
     if (!s_sta_netif || (transport == PROVISIONING_SOFTAP && !s_ap_netif) || wifi_err != ESP_OK) {
       ESP_LOGE(TAG, "Wi-Fi initialization failed: %s", esp_err_to_name(wifi_err));
+      stop_worker();
       set_state(PROVISIONING_FAILED, "Could not initialize Wi-Fi");
       return false;
     }
@@ -165,6 +220,7 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
   } else if (transport == PROVISIONING_SOFTAP && !s_ap_netif) {
     s_ap_netif = esp_netif_create_default_wifi_ap();
     if (!s_ap_netif) {
+      stop_worker();
       set_state(PROVISIONING_FAILED, "Could not initialize SoftAP");
       return false;
     }
@@ -179,6 +235,7 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
   esp_err_t err = wifi_prov_mgr_init(config);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Manager initialization failed: %s", esp_err_to_name(err));
+    stop_worker();
     set_state(PROVISIONING_FAILED, "Could not initialize provisioning");
     return false;
   }
@@ -195,6 +252,7 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
     ESP_LOGE(TAG, "Provisioning start failed: %s", esp_err_to_name(err));
     wifi_prov_mgr_deinit();
     s_manager_initialized = false;
+    stop_worker();
     set_state(PROVISIONING_FAILED, "Could not start provisioning");
     return false;
   }
@@ -213,6 +271,7 @@ void ProvisioningStop()
     esp_netif_destroy_default_wifi(s_ap_netif);
     s_ap_netif = nullptr;
   }
+  stop_worker();
   set_state(PROVISIONING_IDLE, "Not running");
   if (WifiConnected()) webStart();
 }
