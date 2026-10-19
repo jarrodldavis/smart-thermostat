@@ -54,10 +54,13 @@ static void provisioning_worker(void *)
     if (work & PROVISION_WORK_STOP) done = true;
   }
 
+  // Publish completion and relinquish ownership while holding the same lock
+  // used by start/stop. A replacement worker cannot clear the completion bit
+  // between these two operations.
   xSemaphoreTake(s_lock, portMAX_DELAY);
+  xEventGroupSetBits(s_work_events, PROVISION_WORK_STOPPED);
   s_worker_task = nullptr;
   xSemaphoreGive(s_lock);
-  xEventGroupSetBits(s_work_events, PROVISION_WORK_STOPPED);
   vTaskDelete(nullptr);
 }
 
@@ -152,7 +155,7 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
         OperatingParameters.wifiConnected = true;
         set_state(PROVISIONING_SUCCEEDED, "Provisioning complete");
         break;
-      case WIFI_PROV_END:
+      case WIFI_PROV_END: {
         if (s_manager_initialized) {
           s_manager_initialized = false;
           wifi_prov_mgr_deinit();
@@ -161,9 +164,18 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
           esp_netif_destroy_default_wifi(s_ap_netif);
           s_ap_netif = nullptr;
         }
-        if (s_state == PROVISIONING_SUCCEEDED)
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        const bool succeeded = s_state == PROVISIONING_SUCCEEDED;
+        xSemaphoreGive(s_lock);
+        if (succeeded) {
+          // Provisioning owns Wi-Fi events while its manager is active. Resume
+          // the thermostat handlers so future disconnects update state and
+          // trigger the normal reconnect path.
+          WifiRegisterEventCallbacks();
           xEventGroupSetBits(s_work_events, PROVISION_WORK_CONNECTED);
+        }
         break;
+      }
       default:
         break;
     }
@@ -172,6 +184,7 @@ static void provisioning_event(void *, esp_event_base_t event_base, int32_t even
     WifiStatus.ip = event->ip_info.ip;
     WifiStatus.Connected = true;
     WifiStatus.wifi_started = true;
+    WifiStatus.reconnect_requested = false;
     OperatingParameters.wifiConnected = true;
   }
 }
@@ -193,7 +206,9 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
   // SoftAP provisioning owns the HTTP server port; stopping is harmless for BLE too.
   webStop();
   set_state(PROVISIONING_STARTING, "Starting provisioning...");
+  xSemaphoreTake(s_lock, portMAX_DELAY);
   s_transport = transport;
+  xSemaphoreGive(s_lock);
 
   if (!start_worker()) {
     set_state(PROVISIONING_FAILED, "Not enough memory for provisioning");
@@ -242,9 +257,11 @@ bool ProvisioningStart(PROVISIONING_TRANSPORT transport)
   s_manager_initialized = true;
 
   const char *transport_name = transport == PROVISIONING_BLE ? "ble" : "softap";
+  xSemaphoreTake(s_lock, portMAX_DELAY);
   snprintf(s_qr_payload, sizeof(s_qr_payload),
            "{\"ver\":\"v1\",\"name\":\"%s\",\"pop\":\"%s\",\"transport\":\"%s\"}",
            s_service_name, s_pop, transport_name);
+  xSemaphoreGive(s_lock);
 
   err = wifi_prov_mgr_start_provisioning(WIFI_PROV_SECURITY_1, s_pop, s_service_name,
                                          transport == PROVISIONING_SOFTAP ? s_pop : nullptr);
@@ -285,13 +302,25 @@ void ProvisioningNotifyWifiDeinit()
 
 bool ProvisioningActive()
 {
-  return s_state == PROVISIONING_STARTING || s_state == PROVISIONING_ADVERTISING ||
-         s_state == PROVISIONING_RECEIVING || s_state == PROVISIONING_CONNECTING ||
-         s_state == PROVISIONING_FAILED;
+  if (!s_lock) return false;
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  const bool active = s_state == PROVISIONING_STARTING || s_state == PROVISIONING_ADVERTISING ||
+                      s_state == PROVISIONING_RECEIVING || s_state == PROVISIONING_CONNECTING ||
+                      s_state == PROVISIONING_FAILED;
+  xSemaphoreGive(s_lock);
+  return active;
 }
 
-PROVISIONING_STATE ProvisioningGetState() { return s_state; }
-const char *ProvisioningGetStatus() { return s_status; }
-const char *ProvisioningGetServiceName() { return s_service_name; }
-const char *ProvisioningGetQrPayload() { return s_qr_payload; }
-PROVISIONING_TRANSPORT ProvisioningGetTransport() { return s_transport; }
+bool ProvisioningGetSnapshot(PROVISIONING_SNAPSHOT *snapshot)
+{
+  if (!snapshot || !s_lock) return false;
+
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  snapshot->state = s_state;
+  snapshot->transport = s_transport;
+  strlcpy(snapshot->status, s_status, sizeof(snapshot->status));
+  strlcpy(snapshot->service_name, s_service_name, sizeof(snapshot->service_name));
+  strlcpy(snapshot->qr_payload, s_qr_payload, sizeof(snapshot->qr_payload));
+  xSemaphoreGive(s_lock);
+  return true;
+}

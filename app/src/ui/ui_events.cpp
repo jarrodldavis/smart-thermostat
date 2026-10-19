@@ -21,11 +21,13 @@ static lv_obj_t *provisionInstructions;
 static void refreshProvisioningUi(lv_timer_t *)
 {
   if (!provisionPanel || lv_obj_has_flag(provisionPanel, LV_OBJ_FLAG_HIDDEN)) return;
-  lv_label_set_text(provisionStatus, ProvisioningGetStatus());
-  lv_label_set_text_fmt(provisionService, "%s  (%s)", ProvisioningGetServiceName(),
-                        ProvisioningGetTransport() == PROVISIONING_BLE ? "BLE" : "SoftAP");
-  const char *payload = ProvisioningGetQrPayload();
-  if (payload && payload[0]) lv_qrcode_update(provisionQr, payload, strlen(payload));
+  PROVISIONING_SNAPSHOT snapshot = {};
+  if (!ProvisioningGetSnapshot(&snapshot)) return;
+  lv_label_set_text(provisionStatus, snapshot.status);
+  lv_label_set_text_fmt(provisionService, "%s  (%s)", snapshot.service_name,
+                        snapshot.transport == PROVISIONING_BLE ? "BLE" : "SoftAP");
+  if (snapshot.qr_payload[0])
+    lv_qrcode_update(provisionQr, snapshot.qr_payload, strlen(snapshot.qr_payload));
 }
 
 static void showProvisioning(lv_event_t *)

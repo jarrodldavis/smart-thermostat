@@ -148,6 +148,14 @@ typedef enum {
     PROVISIONING_FAILED
 } PROVISIONING_STATE;
 
+typedef struct {
+    PROVISIONING_STATE state;
+    PROVISIONING_TRANSPORT transport;
+    char status[80];
+    char service_name[16];
+    char qr_payload[192];
+} PROVISIONING_SNAPSHOT;
+
 
 extern OPERATING_PARAMETERS OperatingParameters;
 extern WIFI_CREDS WifiCreds;
@@ -262,6 +270,7 @@ bool WifiConnected();
 void WifiDisconnect();
 void WifiDeinit();
 void WifiAdoptNetwork(esp_netif_t *sta_netif);
+void WifiRegisterEventCallbacks();
 void startReconnectTask();
 uint16_t WifiSignal();
 char *WifiAddress();
@@ -273,11 +282,7 @@ void ProvisioningInit();
 bool ProvisioningStart(PROVISIONING_TRANSPORT transport);
 void ProvisioningStop();
 bool ProvisioningActive();
-PROVISIONING_STATE ProvisioningGetState();
-PROVISIONING_TRANSPORT ProvisioningGetTransport();
-const char *ProvisioningGetStatus();
-const char *ProvisioningGetServiceName();
-const char *ProvisioningGetQrPayload();
+bool ProvisioningGetSnapshot(PROVISIONING_SNAPSHOT *snapshot);
 void ProvisioningNotifyWifiDeinit();
 
 // TFT
