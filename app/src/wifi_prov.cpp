@@ -161,6 +161,7 @@ static void provFinishTask(void *arg)
     // The station is already connected; keep that connection
     WifiProvisioned();
     provActive = false;
+    UiProvRequestDismiss();
   }
   else
   {

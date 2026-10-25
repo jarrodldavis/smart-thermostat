@@ -81,7 +81,7 @@ void app_main()
 #endif
 
   // Start wifi
-  ESP_LOGI (TAG, "Starting wifi (\"%s\", \"%s\")", WifiCreds.ssid, WifiCreds.password);
+  ESP_LOGI (TAG, "Starting wifi (\"%s\", ******)", WifiCreds.ssid);
   ESP_ERROR_CHECK(esp_netif_init());
   OperatingParameters.wifiConnected = 
     // wifiStart(WifiCreds.hostname, WifiCreds.ssid, WifiCreds.password);

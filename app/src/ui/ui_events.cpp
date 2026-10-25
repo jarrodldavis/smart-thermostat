@@ -217,7 +217,7 @@ void tftSetNewWifi(lv_event_t * e)
   if (strlen(WifiCreds.ssid) > 0)
   {
     strcpy (WifiCreds.password, lv_textarea_get_text(ui_PSK));
-    printf ("*** [tftSetNewWifi] WifiCreds.password = %s\n", WifiCreds.password);
+    printf ("*** [tftSetNewWifi] WifiCreds.password = ******\n");
     // Save the new wifi credentials to NVRAM
     setWifiCreds(); //Store locally (in Thermostat NVS)
     WifiSetCredentials(WifiCreds.ssid, WifiCreds.password);

@@ -27,6 +27,7 @@ static lv_obj_t *provQr = NULL;
 static lv_timer_t *provTimer = NULL;
 static char provQrShown[200] = "";
 static volatile bool showRequested = false;
+static volatile bool dismissRequested = false;
 
 // Same look as the SquareLine-generated buttons
 static void styleButton(lv_obj_t *btn, lv_obj_t *label)
@@ -162,9 +163,28 @@ void UiProvRequestShow()
   showRequested = true;
 }
 
-// Called from the LVGL task loop; opens the panel if another task asked for it
+// Safe to call from any task
+void UiProvRequestDismiss()
+{
+  dismissRequested = true;
+}
+
+// Called from the LVGL task loop; opens or dismisses the panel if another task asked for it
 void UiProvShowIfRequested()
 {
+  if (dismissRequested)
+  {
+    dismissRequested = false;
+    showRequested = false;
+    if (provPanel != NULL)
+    {
+      closePanel(NULL);
+      if (lv_disp_get_scr_act(NULL) == ui_WifiConfig)
+        _ui_screen_change(&ui_MainScreen, LV_SCR_LOAD_ANIM_NONE, 0, 0, &ui_MainScreen_screen_init);
+    }
+    return;
+  }
+
   if (!showRequested)
     return;
   showRequested = false;

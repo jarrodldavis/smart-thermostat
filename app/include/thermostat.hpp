@@ -273,6 +273,7 @@ const char *WifiProvSecret();
 const char *WifiProvQrPayload();
 void UiProvInit();
 void UiProvRequestShow();
+void UiProvRequestDismiss();
 
 // TFT
 void tftInit();
