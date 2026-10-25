@@ -238,7 +238,10 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
     wifi_prov_mgr_deinit();
     if (xTaskCreate(provFinishTask, "prov_finish", 6144, NULL, 5, NULL) != pdPASS)
     {
-      ESP_LOGE(TAG, "Could not create prov_finish task");
+      // Out of memory: release the wifi module so nothing stays gated on
+      // provisioning. The event handlers stay registered and are reused by
+      // the next WifiProvStart.
+      ESP_LOGE(TAG, "Could not create prov_finish task; credentials not saved");
       provCredsPending = false;
       provFreeSecurity();
       provEndWithoutCreds();
