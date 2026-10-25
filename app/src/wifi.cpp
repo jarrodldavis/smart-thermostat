@@ -284,6 +284,13 @@ void WiFi_SsidScanNew(void)
  */
 void WiFi_ScanSSID(void)
 {
+  // The scan restarts the wifi stack, which would break an active provisioning session
+  if (WifiProvActive())
+  {
+    ESP_LOGW(TAG, "Provisioning active - scan skipped");
+    return;
+  }
+
   wifiScanActive = true;
 
   // if (OperatingParameters.wifiConnected)
@@ -314,7 +321,14 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 
   // While provisioning, the provisioning manager owns the connect/disconnect logic
   if (WifiProvActive() && event_base == WIFI_EVENT)
+  {
+    if (event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+      WifiStatus.Connected = false;
+      OperatingParameters.wifiConnected = false;
+    }
     return;
+  }
 
   if (wifiScanActive)
   {
@@ -698,6 +712,36 @@ bool WifiStarted()
 bool WifiRestartPending()
 {
   return WifiStatus.reconnect_requested;
+}
+
+// Called when provisioning has connected the station successfully. The existing
+// connection is kept; this only brings the module state in line with it.
+void WifiProvisioned()
+{
+  if (s_wifi_event_group == NULL)
+    WifiRegisterEventCallbacks();
+
+  esp_netif_ip_info_t ipInfo;
+  if (esp_netif_get_ip_info(esp_netif_interface_sta, &ipInfo) == ESP_OK)
+    WifiStatus.ip = ipInfo.ip;
+
+  WifiStatus.wifi_started = true;
+  WifiStatus.Connected = true;
+  WifiStatus.reconnect_requested = false;
+  OperatingParameters.wifiConnected = true;
+  wifiConnecting = false;
+  initTimeSntp();
+}
+
+// Called when provisioning ended without new credentials. Provisioning
+// disconnected the station, so ask the state machine to reconnect.
+void WifiProvAborted()
+{
+  if (strlen(WifiCreds.ssid) > 0)
+  {
+    WifiStatus.reconnect_requested = true;
+    lastWifiReconnect = 0;
+  }
 }
 
 bool WifiConnected()

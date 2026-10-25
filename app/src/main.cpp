@@ -91,8 +91,12 @@ void app_main()
   if (strlen(WifiCreds.ssid) == 0)
   {
     ESP_LOGI (TAG, "No wifi credentials stored; starting provisioning");
-    if (!(WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE)))
-      WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+    bool provStarted = WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE);
+    if (!provStarted)
+      provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+    // Show the QR code / credentials on the touchscreen
+    if (provStarted)
+      UiProvRequestShow();
   }
 
 #ifdef MQTT_ENABLED

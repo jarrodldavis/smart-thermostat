@@ -454,7 +454,13 @@ void tftPump(void * parameter)
   {
     lv_timer_handler();
 
+    UiProvShowIfRequested();
+
     tftUpdateDisplay();
+
+    // Keep the display on while provisioning so the QR code can be scanned
+    if (WifiProvActive())
+      lastTouchDetected = millis();
 
     if (millis() - lastTouchDetected > OperatingParameters.thermostatSleepTime * 1000)
     {

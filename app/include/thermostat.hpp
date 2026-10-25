@@ -237,6 +237,7 @@ bool eepromUpdateArbMode(const char *key, HVAC_MODE mode);
 
 // HTTP Server
 void webStart();
+void *webServerGetHandle();
 
 // Routine to control wifi
 void WifiSetHostname(const char *hostname);
@@ -244,6 +245,9 @@ void WifiSetCredentials(const char *ssid, const char *pass);
 bool WifiStart(const char *hostname, const char *ssid, const char *pass);
 bool WifiStarted();
 bool WifiRestartPending();
+void WifiProvisioned();
+void WifiProvAborted();
+void UiProvShowIfRequested();
 bool WifiConnected();
 void WifiDisconnect();
 void startReconnectTask();
@@ -264,8 +268,11 @@ bool WifiProvActive();
 bool WifiProvBleAvailable();
 const char *WifiProvStatusText();
 const char *WifiProvServiceName();
-const char *WifiProvPop();
+const char *WifiProvUsername();
+const char *WifiProvSecret();
+const char *WifiProvQrPayload();
 void UiProvInit();
+void UiProvRequestShow();
 
 // TFT
 void tftInit();
