@@ -43,6 +43,9 @@ static const char *TAG = "WIFI_PROV";
 #define PROV_TIMEOUT_US (5LL * 60 * 1000 * 1000)
 
 static volatile bool provActive = false;
+// The BLE scheme releases controller memory on deinit, so it can only be used
+// once per boot. SoftAP remains available for later provisioning sessions.
+static volatile bool bleAvailableThisBoot = true;
 static bool provEventsRegistered = false;
 static esp_netif_t *provApNetif = NULL;
 static WIFI_PROV_TRANSPORT provTransport = WIFI_PROV_TRANSPORT_SOFTAP;
@@ -256,7 +259,7 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
 bool WifiProvBleAvailable()
 {
 #ifdef WIFI_PROV_BLE_AVAILABLE
-  return true;
+  return bleAvailableThisBoot;
 #else
   return false;
 #endif
@@ -301,6 +304,15 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
     provSetStatus("Failed: scan in progress");
     return false;
   }
+
+#ifdef WIFI_PROV_BLE_AVAILABLE
+  if (transport == WIFI_PROV_TRANSPORT_BLE && !WifiProvBleAvailable())
+  {
+    ESP_LOGW(TAG, "BLE provisioning already used this boot; restart to use BLE again");
+    provSetStatus("Restart to use BLE again");
+    return false;
+  }
+#endif
 
   provLogHeap("before provisioning");
 
@@ -350,6 +362,9 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
 #ifdef WIFI_PROV_BLE_AVAILABLE
   if (transport == WIFI_PROV_TRANSPORT_BLE)
   {
+    // FREE_BTDM makes a second BLE manager initialization impossible this boot.
+    // Consume the BLE option before init so failure paths cannot retry it.
+    bleAvailableThisBoot = false;
     config.scheme = wifi_prov_scheme_ble;
     config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
   }

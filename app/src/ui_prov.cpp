@@ -24,6 +24,7 @@ static lv_obj_t *provButton = NULL;
 static lv_obj_t *provPanel = NULL;
 static lv_obj_t *provInfoLabel = NULL;
 static lv_obj_t *provQr = NULL;
+static lv_obj_t *provBleButton = NULL;
 static lv_timer_t *provTimer = NULL;
 static char provQrShown[200] = "";
 static volatile bool showRequested = false;
@@ -60,6 +61,14 @@ static void updateInfo()
   if (provInfoLabel == NULL)
     return;
 
+  if (provBleButton != NULL)
+  {
+    if (WifiProvBleAvailable())
+      lv_obj_clear_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
+    else
+      lv_obj_add_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
+  }
+
   if (WifiProvActive())
   {
     lv_label_set_text_fmt(provInfoLabel, "%s\n%s", WifiProvServiceName(), WifiProvStatusText());
@@ -87,7 +96,10 @@ static void updateInfo()
       provQr = NULL;
       provQrShown[0] = '\0';
     }
-    lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose BLE or SoftAP", WifiProvStatusText());
+    if (WifiProvBleAvailable())
+      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose BLE or SoftAP", WifiProvStatusText());
+    else
+      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nRestart for BLE", WifiProvStatusText());
   }
 }
 
@@ -104,6 +116,7 @@ static void closePanel(lv_event_t *e)
     provPanel = NULL;
     provInfoLabel = NULL;
     provQr = NULL;
+    provBleButton = NULL;
     provQrShown[0] = '\0';
   }
 }
@@ -148,7 +161,7 @@ static void openPanel(lv_event_t *e)
   lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, PROV_QR_SIZE + 8);
 
   if (WifiProvBleAvailable())
-    addButton(provPanel, "BLE", LV_ALIGN_TOP_RIGHT, 0, 0, 90, startBle);
+    provBleButton = addButton(provPanel, "BLE", LV_ALIGN_TOP_RIGHT, 0, 0, 90, startBle);
   addButton(provPanel, "SoftAP", LV_ALIGN_TOP_RIGHT, 0, 44, 90, startSoftAp);
   addButton(provPanel, "Stop", LV_ALIGN_TOP_RIGHT, 0, 88, 90, stopProv);
   addButton(provPanel, "Close", LV_ALIGN_BOTTOM_RIGHT, 0, 0, 90, closePanel);

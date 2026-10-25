@@ -309,4 +309,5 @@ Wi-Fi credentials can be sent to the thermostat from a phone using the Espressif
 * Otherwise, open the Wi-Fi config screen, tap **Prov**, then choose **BLE** or **SoftAP**.
 * Scan the QR code shown on the screen with the app.
 * The credentials are saved once the thermostat connects to the network. Provisioning stops by itself after 5 minutes.
+* BLE provisioning releases Bluetooth memory when it ends. To use BLE again, restart the thermostat; SoftAP provisioning remains available without a restart.
 * Entering credentials on the touch screen or over telnet still works.
