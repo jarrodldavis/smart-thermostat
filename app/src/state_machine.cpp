@@ -349,8 +349,8 @@ void hvacStateUpdate()
 
 static inline bool wifi_reconnect_check(OPERATING_PARAMETERS *params)
 {
-  bool ret = ( !(params->wifiConnected) && strlen(WifiCreds.ssid) && WifiStarted() ) ||
-                WifiRestartPending();
+  bool ret = ( ( !(params->wifiConnected) && strlen(WifiCreds.ssid) && WifiStarted() ) ||
+                WifiRestartPending() ) && !WifiProvActive();
 #ifdef MATTER_ENABLED
   ret = ret && !(params->MatterStarted);
 #endif

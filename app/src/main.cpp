@@ -87,6 +87,14 @@ void app_main()
     // wifiStart(WifiCreds.hostname, WifiCreds.ssid, WifiCreds.password);
     WifiStart(OperatingParameters.DeviceName, WifiCreds.ssid, WifiCreds.password);
 
+  // With no stored credentials, offer Wi-Fi provisioning (BLE preferred, SoftAP fallback)
+  if (strlen(WifiCreds.ssid) == 0)
+  {
+    ESP_LOGI (TAG, "No wifi credentials stored; starting provisioning");
+    if (!(WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE)))
+      WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+  }
+
 #ifdef MQTT_ENABLED
   // Start Matter
   ESP_LOGI (TAG, "Starting MQTT");

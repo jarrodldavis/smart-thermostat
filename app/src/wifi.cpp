@@ -312,6 +312,10 @@ static void event_handler(void* arg, esp_event_base_t event_base,
   ESP_LOGI(TAG, "event_handler()");
 #endif
 
+  // While provisioning, the provisioning manager owns the connect/disconnect logic
+  if (WifiProvActive() && event_base == WIFI_EVENT)
+    return;
+
   if (wifiScanActive)
   {
     ESP_LOGE(TAG, "  SSID scan active - aborting wifi connect (event_id = %d)", event_id);

@@ -6,7 +6,17 @@ Main features are:
 * Can be integrated into a home automation system (such as Home Assistant)
 * Cloud connection not required
 * WiFi connected
-* Initial setup (e.g., WiFi credentials) configured via touch screen interface
+* Initial setup (e.g., WiFi credentials) configured via touch screen interface, or by Wi-Fi provisioning from a phone
+
+#### Wi-Fi provisioning
+
+The thermostat supports ESP-IDF Wi-Fi provisioning (`src/wifi_prov.cpp`) using the Espressif "ESP BLE Provisioning" or "ESP SoftAP Provisioning" apps (iOS/Android):
+
+* If no Wi-Fi credentials are stored at boot, provisioning starts automatically (BLE, falling back to SoftAP).
+* Otherwise, open the Wi-Fi config screen, tap **Prov**, and choose **BLE** or **SoftAP**. The screen shows the device name (`PROV_xxxxxx`) and proof-of-possession (PoP) to enter in the app. For SoftAP the Wi-Fi password is the same as the PoP.
+* Provisioning times out after 5 minutes. Entering credentials manually (touch screen / telnet `Config`) still works.
+* The Prov controls are created at runtime by `src/ui_prov.cpp`, not in SquareLine Studio, so regenerating the SquareLine UI will not remove them.
+* BLE needs `CONFIG_BT_ENABLED=y` and `CONFIG_BT_NIMBLE_ENABLED=y` (see `docs/sdkconfig-thermostat-settings.txt`); without them only SoftAP is offered.
 * Will act similarly to a person's preferences when it comes to HVAC. For example:
     * the temperature set should be dependent upon local forecast
     * If the outside temp is close to the set thermostat temp, suggest opening a window

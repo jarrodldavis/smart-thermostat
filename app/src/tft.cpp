@@ -421,6 +421,7 @@ void tftInit()
   lv_indev_drv_register(&indev_drv);
   
   ui_init();
+  UiProvInit();
 
   setHvacModesDropdown();
 
