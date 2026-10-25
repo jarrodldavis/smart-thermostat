@@ -268,8 +268,6 @@ bool WifiProvActive();
 bool WifiProvBleAvailable();
 const char *WifiProvStatusText();
 const char *WifiProvServiceName();
-const char *WifiProvUsername();
-const char *WifiProvSecret();
 const char *WifiProvQrPayload();
 void UiProvInit();
 void UiProvRequestShow();

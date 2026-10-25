@@ -274,16 +274,6 @@ const char *WifiProvServiceName()
   return provServiceName;
 }
 
-const char *WifiProvUsername()
-{
-  return PROV_USERNAME;
-}
-
-const char *WifiProvSecret()
-{
-  return provSecret;
-}
-
 const char *WifiProvQrPayload()
 {
   return provQr;

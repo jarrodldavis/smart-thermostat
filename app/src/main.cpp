@@ -94,7 +94,7 @@ void app_main()
     bool provStarted = WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE);
     if (!provStarted)
       provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
-    // Show the QR code / credentials on the touchscreen
+    // Show the QR code on the touchscreen
     if (provStarted)
       UiProvRequestShow();
   }
