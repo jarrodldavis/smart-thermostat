@@ -303,11 +303,12 @@ Another possible location for chip ELF files:
 
 ## Wi-Fi provisioning
 
-Wi-Fi credentials can be sent to the thermostat from a phone using the Espressif "ESP SoftAP Provisioning" app (iOS / Android), instead of typing them on the touch screen.
+Wi-Fi credentials can be sent to the thermostat from a phone using the Espressif "ESP BLE Provisioning" or "ESP SoftAP Provisioning" app (iOS / Android), instead of typing them on the touch screen.
 
 * If no Wi-Fi credentials are stored when the thermostat starts, provisioning begins automatically and the provisioning screen opens.
-* Otherwise, open the Wi-Fi config screen, tap **Prov**, then choose **SoftAP**.
+* Otherwise, open the Wi-Fi config screen, tap **Prov**, then choose **BLE** or **SoftAP**.
 * Use the service name, SoftAP password, and proof of possession (PoP) shown on screen to provision manually in the app.
 * QR rendering is optional: add `-D LV_USE_QRCODE=1` to the environment's `build_flags` to scan a code instead.
 * The credentials are saved once the thermostat connects to the network. Provisioning stops by itself after 5 minutes.
+* BLE provisioning releases Bluetooth memory when it ends. To use BLE again, restart the thermostat; SoftAP provisioning remains available without a restart.
 * Entering credentials on the touch screen or over telnet still works.

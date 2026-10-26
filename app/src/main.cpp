@@ -106,11 +106,13 @@ void app_main()
   ESP_LOGI (TAG, "Starting web server");
   webStart();
 
-  // With no stored credentials, offer Wi-Fi provisioning over SoftAP
+  // With no stored credentials, offer Wi-Fi provisioning (BLE preferred, SoftAP fallback)
   if (strlen(WifiCreds.ssid) == 0)
   {
     ESP_LOGI (TAG, "No wifi credentials stored; starting provisioning");
-    bool provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+    bool provStarted = WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE);
+    if (!provStarted)
+      provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
     // Show the QR code on the touchscreen
     if (provStarted)
       UiProvRequestShow();

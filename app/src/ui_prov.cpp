@@ -26,6 +26,7 @@ static lv_obj_t *provInfoLabel = NULL;
 #if LV_USE_QRCODE
 static lv_obj_t *provQr = NULL;
 #endif
+static lv_obj_t *provBleButton = NULL;
 static lv_timer_t *provTimer = NULL;
 #if LV_USE_QRCODE
 static char provQrShown[200] = "";
@@ -69,6 +70,14 @@ static void updateInfo()
 {
   if (provInfoLabel == NULL)
     return;
+
+  if (provBleButton != NULL)
+  {
+    if (WifiProvBleAvailable())
+      lv_obj_clear_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
+    else
+      lv_obj_add_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
+  }
 
   if (WifiProvActive())
   {
@@ -115,7 +124,10 @@ static void updateInfo()
       provQrShown[0] = '\0';
     }
 #endif
-    lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose SoftAP", WifiProvStatusText());
+    if (WifiProvBleAvailable())
+      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose BLE or SoftAP", WifiProvStatusText());
+    else
+      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nRestart for BLE", WifiProvStatusText());
   }
 }
 
@@ -136,6 +148,7 @@ static void closePanel(lv_event_t *e)
     provInfoLabel = NULL;
 #if LV_USE_QRCODE
     provQr = NULL;
+    provBleButton = NULL;
     provQrShown[0] = '\0';
 #endif
   }
@@ -143,6 +156,12 @@ static void closePanel(lv_event_t *e)
 
 static void provTimerCb(lv_timer_t *t)
 {
+  updateInfo();
+}
+
+static void startBle(lv_event_t *e)
+{
+  WifiProvStart(WIFI_PROV_TRANSPORT_BLE);
   updateInfo();
 }
 
@@ -179,6 +198,8 @@ static void openPanel(lv_event_t *e)
 #endif
   lv_obj_set_style_text_font(provInfoLabel, &lv_font_montserrat_14, 0);
 
+  if (WifiProvBleAvailable())
+    provBleButton = addButton(provPanel, "BLE", LV_ALIGN_TOP_RIGHT, 0, 0, 90, startBle);
   addButton(provPanel, "SoftAP", LV_ALIGN_TOP_RIGHT, 0, 44, 90, startSoftAp);
   addButton(provPanel, "Stop", LV_ALIGN_TOP_RIGHT, 0, 88, 90, stopProv);
   addButton(provPanel, "Close", LV_ALIGN_BOTTOM_RIGHT, 0, 0, 90, closePanel);

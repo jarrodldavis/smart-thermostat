@@ -259,11 +259,13 @@ void WiFi_ScanSSID( void );
 // Wi-Fi provisioning (wifi_prov.cpp)
 typedef enum
 {
-    WIFI_PROV_TRANSPORT_SOFTAP
+    WIFI_PROV_TRANSPORT_SOFTAP,
+    WIFI_PROV_TRANSPORT_BLE
 } WIFI_PROV_TRANSPORT;
 bool WifiProvStart(WIFI_PROV_TRANSPORT transport);
 void WifiProvStop();
 bool WifiProvActive();
+bool WifiProvBleAvailable();
 const char *WifiProvStatusText();
 const char *WifiProvServiceName();
 const char *WifiProvQrPayload();
