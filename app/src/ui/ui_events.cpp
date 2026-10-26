@@ -457,43 +457,10 @@ bool isCurrentScreenMain()
     return false;
 }
 
-#ifdef MATTER_ENABLED
-#endif
-
-/**
- * Create a QR Code
- */
-void lv_example_qrcode_1()
-{
-#if defined(MATTER_ENABLED) && LV_USE_QRCODE
-    lv_color_t bg_color = lv_palette_lighten(LV_PALETTE_LIGHT_BLUE, 5);
-    lv_color_t fg_color = lv_palette_darken(LV_PALETTE_BLUE, 4);
-
-    lv_obj_t * qr = lv_qrcode_create(lv_scr_act(), 150, fg_color, bg_color);
-    // lv_obj_t * qr = lv_qrcode_create(ui_QRImage, 150, fg_color, bg_color);
-
-    /*Set data*/
-    // const char * data = "MT%3AY.K90AFN00KA0648G00";
-    const char * data = "MATTER NOT YET ENABLED";
-    if (strlen(OperatingParameters.MatterQR) > 0)
-      lv_qrcode_update(qr, OperatingParameters.MatterQR, strlen(OperatingParameters.MatterQR));
-    else
-      lv_qrcode_update(qr, data, strlen(data));
-    // lv_obj_center(qr);
-    lv_obj_align(qr, LV_ALIGN_CENTER, 0, -20);
-
-    /*Add a border with bg_color*/
-    lv_obj_set_style_border_color(qr, bg_color, 0);
-    lv_obj_set_style_border_width(qr, 5, 0);
-#endif
-}
-
 void ShowQrOnScreen(lv_event_t * e)
 {
 #ifdef MATTER_ENABLED
-  printf ("Loading QR and manual pairing codes\n");
-  lv_example_qrcode_1();
-  lv_label_set_text(ui_ManualPairingCode, OperatingParameters.MatterPairingCode);
+  UiMatterShowCommissioning();
 #endif
 }
 

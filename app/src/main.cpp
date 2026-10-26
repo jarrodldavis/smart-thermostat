@@ -107,16 +107,28 @@ void app_main()
   ESP_LOGI (TAG, "Starting web server");
   webStart();
 
-  // With no stored credentials, offer Wi-Fi provisioning (BLE preferred, SoftAP fallback)
+  // Combined Wi-Fi/Matter commissioning is available when CHIP-over-BLE is
+  // enabled. Otherwise provision Wi-Fi before starting Matter.
   if (strlen(WifiCreds.ssid) == 0)
   {
-    ESP_LOGI (TAG, "No wifi credentials stored; starting provisioning");
-    bool provStarted = WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE);
-    if (!provStarted)
-      provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
-    // Show the QR code on the touchscreen
-    if (provStarted)
-      UiProvRequestShow();
+#ifdef MATTER_ENABLED
+    if (OperatingParameters.MatterEnabled && CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE)
+    {
+      if (OperatingParameters.MatterStarted)
+        MatterOpenCommissioningWindow(MATTER_PAIRING_TRANSPORT::BLE);
+      UiMatterRequestShow();
+    }
+    else
+#endif
+    {
+      ESP_LOGI (TAG, "No wifi credentials stored; starting provisioning");
+      bool provStarted = WifiProvBleAvailable() && WifiProvStart(WIFI_PROV_TRANSPORT_BLE);
+      if (!provStarted)
+        provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+      // Show the QR code on the touchscreen
+      if (provStarted)
+        UiProvRequestShow();
+    }
   }
 
 #ifdef TELNET_ENABLED
