@@ -6,10 +6,8 @@ CONFIG_MBEDTLS_HKDF_C=y
 CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=2
 CONFIG_ESP_MATTER_ENABLE_OPENTHREAD=n
 CONFIG_ENABLE_CHIPOBLE=n
-CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING=y
 # Commissioning starts only after choosing Network or BLE on the touchscreen.
 CONFIG_CHIP_ENABLE_PAIRING_AUTOSTART=n
-CONFIG_CHIPOBLE_ENABLE_ADVERTISING_AUTOSTART=0
 
 # Reclaim internal RAM for Matter, BLE, the touchscreen and the HTTP server.
 # Prefer lower Wi-Fi throughput over reserving RAM for high-rate traffic.
