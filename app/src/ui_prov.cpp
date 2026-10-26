@@ -204,6 +204,9 @@ static void openPanel(lv_event_t *e)
   addButton(provPanel, "Stop", LV_ALIGN_TOP_RIGHT, 0, 88, 90, stopProv);
   addButton(provPanel, "Close", LV_ALIGN_BOTTOM_RIGHT, 0, 0, 90, closePanel);
 
+  if (!WifiProvActive() && !WifiProvBleAvailable())
+    WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+
   updateInfo();
   provTimer = lv_timer_create(provTimerCb, 500, NULL);
 }
