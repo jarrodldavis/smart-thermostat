@@ -28,6 +28,22 @@ CONFIG_ESP_COREDUMP_FLASH_NO_OVERWRITE=n
 
 # Opt in to BLE provisioning by enabling Bluetooth and the NimBLE host.
 CONFIG_BT_ENABLED=n
+# When BLE is enabled, provision one phone as a peripheral. Allow one
+# advertising activity alongside the connection; no central/scanning roles.
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_CTRL_BLE_MAX_ACT=2
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+# Bound packet pools for the single provisioning connection.
+CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=6
+CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=12
+CONFIG_BT_NIMBLE_TRANSPORT_ACL_FROM_LL_COUNT=12
+CONFIG_BT_NIMBLE_TRANSPORT_EVT_COUNT=10
+CONFIG_BT_NIMBLE_TRANSPORT_EVT_DISCARD_COUNT=2
+# Keep one slot for the SDK's local privacy key; provisioning does not bond
+# or restore saved subscriptions between BLE connections.
+CONFIG_BT_NIMBLE_MAX_BONDS=1
+CONFIG_BT_NIMBLE_MAX_CCCDS=0
 
 # Existing application networking and HTTP limits.
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=4096
