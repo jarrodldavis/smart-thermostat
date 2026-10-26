@@ -33,6 +33,9 @@
 #include "esp_wps.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
+#ifdef MATTER_ENABLED
+#include <platform/CHIPDeviceLayer.h>
+#endif
 
 //@@@ forward declaration for event_handler()
 void WifiRegisterEventCallbacks();
@@ -737,6 +740,22 @@ void WifiProvisioned()
 // disconnected the station, so ask the state machine to reconnect.
 void WifiProvAborted()
 {
+#ifdef MATTER_ENABLED
+  if (OperatingParameters.MatterStarted)
+  {
+    // Matter owns this driver. Re-evaluate its restored station configuration
+    // on the CHIP event loop; the legacy reconnect path is disabled in this mode.
+    CHIP_ERROR err = chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
+      CHIP_ERROR recoveryErr = chip::DeviceLayer::ConnectivityMgr().SetWiFiStationMode(
+          chip::DeviceLayer::ConnectivityManager::kWiFiStationMode_Enabled);
+      if (recoveryErr != CHIP_NO_ERROR)
+        ESP_LOGE(TAG, "Failed to resume Matter Wi-Fi: %s", recoveryErr.AsString());
+    });
+    if (err != CHIP_NO_ERROR)
+      ESP_LOGE(TAG, "Failed to schedule Matter Wi-Fi recovery: %s", err.AsString());
+    return;
+  }
+#endif
   if (strlen(WifiCreds.ssid) > 0)
   {
     WifiStatus.reconnect_requested = true;

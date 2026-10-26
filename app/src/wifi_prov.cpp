@@ -47,6 +47,8 @@ static char provSoftApKey[9] = "";  // SoftAP Wi-Fi password
 static char provQr[200] = "";
 static char provStatus[96] = "Idle";
 static bool provCredsPending = false;
+static wifi_config_t previousStaConfig;
+static bool previousStaConfigValid = false;
 static char pendingSsid[sizeof(WifiCreds.ssid)];
 static char pendingPass[sizeof(WifiCreds.password)];
 #ifdef WIFI_PROV_USE_SEC2
@@ -130,13 +132,22 @@ static void provTeardown(bool deinitManager = true)
   provLogHeap("after provisioning");
 }
 
-// Provisioning finished without new credentials: release the wifi module and
-// let it reconnect with whatever is stored. provActive must be cleared before
-// the wifi module is told, since it gates the state machine's reconnect logic.
+// The manager clears the driver's station configuration when it starts.
+// Restore it before releasing the reconnect guard on cancellation or failure.
 static void provEndWithoutCreds()
 {
-  provActive = false;
+  if (previousStaConfigValid)
+  {
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &previousStaConfig);
+    if (err != ESP_OK)
+      ESP_LOGE(TAG, "Failed to restore station configuration: %s", esp_err_to_name(err));
+    else
+      ESP_LOGI(TAG, "Restored previous station configuration");
+    memset(&previousStaConfig, 0, sizeof(previousStaConfig));
+    previousStaConfigValid = false;
+  }
   WifiProvAborted();
+  provActive = false;
 }
 
 // Runs after WIFI_PROV_END in its own task, outside the event dispatch: it
@@ -152,6 +163,8 @@ static void provFinishTask(void *arg)
     strlcpy(WifiCreds.ssid, pendingSsid, sizeof(WifiCreds.ssid));
     strlcpy(WifiCreds.password, pendingPass, sizeof(WifiCreds.password));
     setWifiCreds();
+    memset(&previousStaConfig, 0, sizeof(previousStaConfig));
+    previousStaConfigValid = false;
     // The station is already connected; keep that connection
     WifiProvisioned();
     provActive = false;
@@ -293,6 +306,16 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
   // Set before the manager runs so the wifi module ignores the disconnect
   // that starting provisioning causes
   provActive = true;
+
+  esp_err_t snapshotErr = esp_wifi_get_config(WIFI_IF_STA, &previousStaConfig);
+  previousStaConfigValid = snapshotErr == ESP_OK;
+  if (!previousStaConfigValid)
+  {
+    ESP_LOGE(TAG, "Failed to save station configuration: %s", esp_err_to_name(snapshotErr));
+    provSetStatus("Failed: cannot save wifi configuration");
+    provActive = false;
+    return false;
+  }
 
   if (!provEventsRegistered)
   {
