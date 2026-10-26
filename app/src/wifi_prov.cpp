@@ -101,6 +101,22 @@ extern bool wifiScanActive;
 
 static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void *data);
 
+// Safe from WIFI_PROV_END after manager deinitialization, including when
+// memory is too low to create the cleanup worker. Keep handler removal separate
+// because the event loop may still be dispatching this provisioning event.
+static void provReleaseTransport()
+{
+  if (provTimer)
+    esp_timer_stop(provTimer);
+  provFreeSecurity();
+  esp_wifi_set_mode(WIFI_MODE_STA);
+  if (provApNetif != NULL)
+  {
+    esp_netif_destroy_default_wifi(provApNetif);
+    provApNetif = NULL;
+  }
+}
+
 // Single teardown path used by every end/failure case, in a fixed order.
 // Must not run inside a provisioning/session event handler: unregistering the
 // last handler of an event base from within its own dispatch frees the node
@@ -111,7 +127,6 @@ static void provTeardown(bool deinitManager = true)
     esp_timer_stop(provTimer);
   if (deinitManager)
     wifi_prov_mgr_deinit();
-  provFreeSecurity();
   if (provEventsRegistered)
   {
     esp_err_t err = esp_event_handler_unregister(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID, &provEventHandler);
@@ -122,13 +137,8 @@ static void provTeardown(bool deinitManager = true)
       ESP_LOGW(TAG, "Failed to unregister session event handler: %s", esp_err_to_name(err));
     provEventsRegistered = false;
   }
-  // The manager may have left the radio in AP+STA mode
-  esp_wifi_set_mode(WIFI_MODE_STA);
-  if (provApNetif != NULL)
-  {
-    esp_netif_destroy_default_wifi(provApNetif);
-    provApNetif = NULL;
-  }
+  // The manager may have left the radio in AP+STA mode.
+  provReleaseTransport();
   provLogHeap("after provisioning");
 }
 
@@ -251,7 +261,7 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
       // the next WifiProvStart.
       ESP_LOGE(TAG, "Could not create prov_finish task; credentials not saved");
       provCredsPending = false;
-      provFreeSecurity();
+      provReleaseTransport();
       provEndWithoutCreds();
     }
     break;

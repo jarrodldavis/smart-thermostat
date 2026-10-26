@@ -104,6 +104,9 @@ static void updateInfo()
 
 static void closePanel(lv_event_t *e)
 {
+  if (WifiProvActive())
+    WifiProvStop();
+
   if (provTimer)
   {
     lv_timer_del(provTimer);
