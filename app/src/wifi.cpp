@@ -349,10 +349,10 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 #ifdef MATTER_ENABLED
     if (!OperatingParameters.MatterStarted)
 #endif
+    {
       esp_wifi_connect();
-      // WifiStatus.reconnect_requested = true;
-      wifiConnecting = false;
-      // esp_wifi_connect();
+    }
+    wifiConnecting = false;
   }
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
   {
@@ -523,11 +523,21 @@ void WifiSwitchMatterMode()
 {
   if (OperatingParameters.MatterEnabled)
   {
+    // Leave the station available for first-time provisioning. MatterInit()
+    // follows the same policy when booting without stored credentials.
+    if (strlen(WifiCreds.ssid) == 0)
+      return;
+
     // Setting MatterStarted keeps networkReconnect task from running
     OperatingParameters.MatterStarted = true;
     ESP_LOGI(TAG, "Enabling Matter");
     // Since we are shutting down wifi to enable Matter,
     // do not allow callbacks to take any action.
+    if (s_wifi_event_group != NULL)
+    {
+      ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+      ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+    }
     WifiDeregisterEventCallbacks();
     ESP_LOGI(TAG, "Shutting down wifi connection");
     WifiDisconnect();
@@ -549,15 +559,21 @@ void WifiSwitchMatterMode()
 
 void WifiMatterStarted()
 {
-  // wifiSetHostname(WifiCreds.hostname);
-
-  // Add additional wifi details...
+  // Matter creates the default station netif instead of WifiStart(). Adopt it
+  // so the address display and provisioning can inspect the same interface.
+  esp_netif_interface_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
   WifiStatus.wifi_started = true;
   WifiStatus.if_init = true;
   WifiStatus.driver_started = true;
-  WifiStatus.Connected = true;
-  // Register callbacks for wifi events
-  // WifiRegisterEventCallbacks();
+  wifiConnecting = false;
+  esp_netif_ip_info_t ipInfo = {};
+  wifi_ap_record_t ap = {};
+  WifiStatus.Connected = esp_netif_interface_sta != NULL &&
+      esp_wifi_sta_get_ap_info(&ap) == ESP_OK &&
+      esp_netif_get_ip_info(esp_netif_interface_sta, &ipInfo) == ESP_OK &&
+      ipInfo.ip.addr != 0;
+  WifiStatus.ip = ipInfo.ip;
+  OperatingParameters.wifiConnected = WifiStatus.Connected;
 }
 #endif
 

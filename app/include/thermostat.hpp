@@ -106,6 +106,8 @@ typedef struct
 #ifdef MATTER_ENABLED
     bool MatterEnabled;
     bool MatterStarted;
+    char MatterQR[128];
+    char MatterPairingCode[32];
 #endif
     //@@@ Zipcode for outside temp??
     //@@@ Calibration data for touchscreen?
@@ -199,6 +201,10 @@ void sdcard_check_and_save_coredump(const char* sd_file_path);
 
 #ifdef MATTER_ENABLED
 bool MatterInit();
+void MatterFactoryReset();
+void WifiSwitchMatterMode();
+void WifiMatterStarted();
+void WifiDeinit();
 #endif
 
 #ifdef MQTT_ENABLED

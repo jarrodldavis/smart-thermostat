@@ -313,7 +313,7 @@ void SaveConfigSettings(lv_event_t * e)
   {
     //@@@ Disable all HVAC activity before restarting
     printf ("Matter enablement changed!\n");
-    wifiSwitchMatterMode();
+    WifiSwitchMatterMode();
     if (!OperatingParameters.MatterEnabled)
     {
       // MatterFactoryReset() will be called from tftCountDown() func
