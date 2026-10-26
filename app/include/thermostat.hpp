@@ -266,6 +266,7 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport);
 void WifiProvStop();
 bool WifiProvActive();
 bool WifiProvBleAvailable();
+bool WifiProvBleUsedThisBoot();
 const char *WifiProvStatusText();
 const char *WifiProvServiceName();
 const char *WifiProvQrPayload();

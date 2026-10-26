@@ -43,8 +43,8 @@ static const char *TAG = "WIFI_PROV";
 #define PROV_TIMEOUT_US (5LL * 60 * 1000 * 1000)
 
 static volatile bool provActive = false;
-// The BLE scheme releases controller memory on deinit, so it can only be used
-// once per boot. SoftAP remains available for later provisioning sessions.
+// Keep BLE provisioning to one attempt per boot, including failed attempts.
+// Matter builds retain controller capability for a later Matter startup.
 static volatile bool bleAvailableThisBoot = true;
 static bool provEventsRegistered = false;
 static esp_netif_t *provApNetif = NULL;
@@ -295,6 +295,11 @@ bool WifiProvBleAvailable()
 #endif
 }
 
+bool WifiProvBleUsedThisBoot()
+{
+  return !bleAvailableThisBoot;
+}
+
 bool WifiProvActive()
 {
   return provActive;
@@ -429,11 +434,17 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
 #ifdef WIFI_PROV_BLE_AVAILABLE
   if (transport == WIFI_PROV_TRANSPORT_BLE)
   {
-    // FREE_BTDM makes a second BLE manager initialization impossible this boot.
-    // Consume the BLE option before init so failure paths cannot retry it.
+    // Consume before init so failure paths cannot retry BLE in this boot.
     bleAvailableThisBoot = false;
     config.scheme = wifi_prov_scheme_ble;
+#ifdef MATTER_ENABLED
+    // The transport still stops/deinitializes its NimBLE host. Avoid the
+    // irreversible memory release so Matter can initialize its own host later,
+    // even if Matter is currently disabled in Settings.
+    config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
+#else
     config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
+#endif
   }
   else
 #endif
