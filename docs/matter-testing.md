@@ -6,10 +6,10 @@ The `esp32s3-matter` PlatformIO environment uses Espressif32 6.10.0,
 ESP-IDF 5.4.0, and the pinned `espressif/esp_matter` 1.4.2 managed component.
 The default `esp32s3` environment continues to build MQTT and telnet.
 
-Run inside the existing devcontainer:
+With PlatformIO installed, run from the repository root:
 
 ```sh
-cd /workspaces/smart-thermostat/app
+cd app
 pio run -e esp32s3
 pio run -e esp32s3-matter
 ```
@@ -55,6 +55,11 @@ generated as `sdkconfig.esp32s3-matter` from `sdkconfig.defaults` followed by
 `sdkconfig.matter.defaults`. Remove only that generated Matter configuration
 and rebuild when testing changed defaults. Managed downloads live in
 `managed_components/`; the committed lock pins their versions.
+
+Use `pio run -e esp32s3-matter -t menuconfig` to edit Matter settings, then
+**D — Save minimal config** to export them for review. The export includes the
+combined configuration; copy Matter-specific changes into `sdkconfig.matter.defaults`
+and shared changes into `sdkconfig.defaults`.
 
 The setup passcode is **20202021**, discriminator **3840**. Example attestation
 credentials can produce a development/certification warning in controllers.
