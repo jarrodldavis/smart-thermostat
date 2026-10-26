@@ -2,10 +2,34 @@
 
 This document outlines the custom configurations used in this project's sdkconfig file.
 
-There is a file in the top level (```sdkconfig-thermostat-settings.txt```) that includes the settings described below. Since the sdkconfig file can get regenerated, 
-the script ```update-sdkconfig.sh``` should be used to apply these settings to any newly generated sdkconfig file.
+The settings are maintained in [`app/sdkconfig.defaults`](../app/sdkconfig.defaults).
+PlatformIO applies this file automatically when generating `sdkconfig.esp32s3`;
+the generated file is ignored by Git. The manual settings list and
+`update-sdkconfig.sh` script are no longer needed.
 
-```./update-sdkconfig.sh sdkconfig-thermostat-settings.txt sdkconfig.esp32s3```
+To edit settings interactively, run from the `app` directory:
+
+```sh
+pio run -e esp32s3 -t menuconfig
+```
+
+1. Select the settings to change and press **S** to save the active configuration.
+2. Press **D — Save minimal config** and export to a temporary file, such as
+   `defconfig`. This is the minimal-config export also provided by ESP-IDF's
+   `save-defconfig` target; ordinary Save does not update the defaults.
+3. Review the export and copy the intended changes into `app/sdkconfig.defaults`,
+   preserving its comments and explicit settings. Delete the temporary export.
+
+You can also edit the defaults directly. To verify changed defaults, delete the
+generated `app/sdkconfig.esp32s3` file, then run from the `app` directory:
+
+```sh
+pio run -e esp32s3 -t clean
+pio run -e esp32s3
+```
+
+Regenerate each affected environment's `sdkconfig.<environment>` file after
+changing shared defaults; existing generated values take precedence over defaults.
 
 ## **🛠️ System Performance & Environment**
 
