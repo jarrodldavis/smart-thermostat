@@ -43,9 +43,29 @@ static const char *TAG = "WIFI_PROV";
 #define PROV_TIMEOUT_US (5LL * 60 * 1000 * 1000)
 
 static volatile bool provActive = false;
-// Keep BLE provisioning to one attempt per boot, including failed attempts.
-// Matter builds retain controller capability for a later Matter startup.
-static volatile bool bleAvailableThisBoot = true;
+// Whichever stack claims BLE first owns its one use for this boot. Releasing
+// Bluetooth memory never makes it available again without a restart.
+enum class BleOwner { AVAILABLE, WIFI_PROVISIONING, MATTER };
+static BleOwner bleOwner = BleOwner::AVAILABLE;
+static portMUX_TYPE bleOwnerMux = portMUX_INITIALIZER_UNLOCKED;
+
+static BleOwner currentBleOwner()
+{
+  portENTER_CRITICAL(&bleOwnerMux);
+  BleOwner owner = bleOwner;
+  portEXIT_CRITICAL(&bleOwnerMux);
+  return owner;
+}
+
+static bool claimBle(BleOwner owner)
+{
+  portENTER_CRITICAL(&bleOwnerMux);
+  bool available = bleOwner == BleOwner::AVAILABLE;
+  if (available)
+    bleOwner = owner;
+  portEXIT_CRITICAL(&bleOwnerMux);
+  return available;
+}
 static bool provEventsRegistered = false;
 static esp_netif_t *provApNetif = NULL;
 static WIFI_PROV_TRANSPORT provTransport = WIFI_PROV_TRANSPORT_SOFTAP;
@@ -282,14 +302,8 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
 
 bool WifiProvBleAvailable()
 {
-#ifdef MATTER_ENABLED
-  // Matter needs the Bluetooth controller after Wi-Fi provisioning, too.
-  // The BLE provisioning scheme frees that memory permanently for this boot.
-  if (OperatingParameters.MatterEnabled)
-    return false;
-#endif
 #ifdef WIFI_PROV_BLE_AVAILABLE
-  return bleAvailableThisBoot;
+  return currentBleOwner() == BleOwner::AVAILABLE;
 #else
   return false;
 #endif
@@ -297,7 +311,12 @@ bool WifiProvBleAvailable()
 
 bool WifiProvBleUsedThisBoot()
 {
-  return !bleAvailableThisBoot;
+  return currentBleOwner() == BleOwner::WIFI_PROVISIONING;
+}
+
+bool WifiProvClaimBleForMatter()
+{
+  return claimBle(BleOwner::MATTER);
 }
 
 bool WifiProvActive()
@@ -360,18 +379,18 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
   }
 
 #ifdef WIFI_PROV_BLE_AVAILABLE
-  if (transport == WIFI_PROV_TRANSPORT_BLE && !WifiProvBleAvailable())
+  if (transport == WIFI_PROV_TRANSPORT_BLE && !claimBle(BleOwner::WIFI_PROVISIONING))
   {
-#ifdef MATTER_ENABLED
-    if (OperatingParameters.MatterEnabled)
+    if (!WifiProvBleUsedThisBoot())
     {
-      ESP_LOGW(TAG, "BLE provisioning unavailable while Matter is enabled; use SoftAP");
-      provSetStatus("Use SoftAP with Matter enabled");
-      return false;
+      ESP_LOGW(TAG, "BLE claimed by Matter for this boot; use SoftAP");
+      provSetStatus("BLE claimed by Matter; use SoftAP");
     }
-#endif
-    ESP_LOGW(TAG, "BLE provisioning already used this boot; restart to use BLE again");
-    provSetStatus("Restart to use BLE again");
+    else
+    {
+      ESP_LOGW(TAG, "BLE provisioning already used this boot; restart to use BLE again");
+      provSetStatus("Restart to use BLE again");
+    }
     return false;
   }
 #endif
@@ -434,8 +453,6 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
 #ifdef WIFI_PROV_BLE_AVAILABLE
   if (transport == WIFI_PROV_TRANSPORT_BLE)
   {
-    // Consume before init so failure paths cannot retry BLE in this boot.
-    bleAvailableThisBoot = false;
     config.scheme = wifi_prov_scheme_ble;
     // Both provisioning profiles stop the host and permanently reclaim its
     // Bluetooth memory. Another BLE user requires a reboot after this session.
