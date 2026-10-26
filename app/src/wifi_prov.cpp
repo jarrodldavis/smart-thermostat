@@ -214,8 +214,9 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
   case WIFI_PROV_CRED_RECV:
   {
     wifi_sta_config_t *cfg = (wifi_sta_config_t *)data;
-    strlcpy(pendingSsid, (const char *)cfg->ssid, sizeof(pendingSsid));
-    strlcpy(pendingPass, (const char *)cfg->password, sizeof(pendingPass));
+    // ESP-IDF fields may occupy every byte without a terminating NUL.
+    snprintf(pendingSsid, sizeof(pendingSsid), "%.*s", (int)sizeof(cfg->ssid), (const char *)cfg->ssid);
+    snprintf(pendingPass, sizeof(pendingPass), "%.*s", (int)sizeof(cfg->password), (const char *)cfg->password);
     ESP_LOGI(TAG, "Received credentials for SSID \"%s\"", pendingSsid);
     provSetStatus("Connecting...");
     break;

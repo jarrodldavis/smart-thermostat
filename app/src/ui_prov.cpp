@@ -69,13 +69,24 @@ static void updateInfo()
     if (provQr == NULL)
     {
       provQr = lv_qrcode_create(provPanel, PROV_QR_SIZE, lv_color_black(), lv_color_white());
+      if (provQr == NULL)
+      {
+        lv_label_set_text(provInfoLabel, "Not enough memory for QR.\nStop and retry provisioning.");
+        return;
+      }
       lv_obj_align(provQr, LV_ALIGN_TOP_LEFT, 0, 0);
       lv_obj_set_style_border_color(provQr, lv_color_white(), 0);
       lv_obj_set_style_border_width(provQr, 4, 0);
     }
     if (strcmp(payload, provQrShown) != 0)
     {
-      lv_qrcode_update(provQr, payload, strlen(payload));
+      if (lv_qrcode_update(provQr, payload, strlen(payload)) != LV_RES_OK)
+      {
+        lv_obj_add_flag(provQr, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(provInfoLabel, "Could not render QR.\nStop and retry provisioning.");
+        return;
+      }
+      lv_obj_clear_flag(provQr, LV_OBJ_FLAG_HIDDEN);
       strlcpy(provQrShown, payload, sizeof(provQrShown));
     }
   }
