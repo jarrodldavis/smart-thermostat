@@ -282,6 +282,12 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
 
 bool WifiProvBleAvailable()
 {
+#ifdef MATTER_ENABLED
+  // Matter needs the Bluetooth controller after Wi-Fi provisioning, too.
+  // The BLE provisioning scheme frees that memory permanently for this boot.
+  if (OperatingParameters.MatterEnabled)
+    return false;
+#endif
 #ifdef WIFI_PROV_BLE_AVAILABLE
   return bleAvailableThisBoot;
 #else
@@ -351,6 +357,14 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
 #ifdef WIFI_PROV_BLE_AVAILABLE
   if (transport == WIFI_PROV_TRANSPORT_BLE && !WifiProvBleAvailable())
   {
+#ifdef MATTER_ENABLED
+    if (OperatingParameters.MatterEnabled)
+    {
+      ESP_LOGW(TAG, "BLE provisioning unavailable while Matter is enabled; use SoftAP");
+      provSetStatus("Use SoftAP with Matter enabled");
+      return false;
+    }
+#endif
     ESP_LOGW(TAG, "BLE provisioning already used this boot; restart to use BLE again");
     provSetStatus("Restart to use BLE again");
     return false;

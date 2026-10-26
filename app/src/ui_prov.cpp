@@ -127,7 +127,7 @@ static void updateInfo()
     if (WifiProvBleAvailable())
       lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose BLE or SoftAP", WifiProvStatusText());
     else
-      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nRestart for BLE", WifiProvStatusText());
+      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nUse SoftAP", WifiProvStatusText());
   }
 }
 
