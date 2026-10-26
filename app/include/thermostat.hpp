@@ -265,6 +265,7 @@ typedef enum
 bool WifiProvStart(WIFI_PROV_TRANSPORT transport);
 void WifiProvStop();
 bool WifiProvActive();
+bool WifiProvBleActive();
 bool WifiProvBleAvailable();
 bool WifiProvBleUsedThisBoot();
 bool WifiProvClaimBleForMatter();

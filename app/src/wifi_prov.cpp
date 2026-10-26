@@ -324,6 +324,11 @@ bool WifiProvActive()
   return provActive;
 }
 
+bool WifiProvBleActive()
+{
+  return provActive && provTransport == WIFI_PROV_TRANSPORT_BLE;
+}
+
 const char *WifiProvStatusText()
 {
   return provStatus;

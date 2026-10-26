@@ -27,6 +27,7 @@ static lv_obj_t *provInfoLabel = NULL;
 static lv_obj_t *provQr = NULL;
 #endif
 static lv_obj_t *provBleButton = NULL;
+static lv_obj_t *provBleLabel = NULL;
 static lv_timer_t *provTimer = NULL;
 #if LV_USE_QRCODE
 static char provQrShown[200] = "";
@@ -73,10 +74,18 @@ static void updateInfo()
 
   if (provBleButton != NULL)
   {
-    if (WifiProvBleAvailable())
+    const bool activeBle = WifiProvBleActive();
+    if (WifiProvBleAvailable() || activeBle)
       lv_obj_clear_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
     else
       lv_obj_add_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
+    if (activeBle)
+      lv_obj_add_state(provBleButton, LV_STATE_DISABLED);
+    else
+      lv_obj_clear_state(provBleButton, LV_STATE_DISABLED);
+    const char *label = activeBle ? "BLE active" : "BLE";
+    if (strcmp(lv_label_get_text(provBleLabel), label) != 0)
+      lv_label_set_text(provBleLabel, label);
   }
 
   if (WifiProvActive())
@@ -149,6 +158,7 @@ static void closePanel(lv_event_t *e)
 #if LV_USE_QRCODE
     provQr = NULL;
     provBleButton = NULL;
+    provBleLabel = NULL;
     provQrShown[0] = '\0';
 #endif
   }
@@ -198,8 +208,11 @@ static void openPanel(lv_event_t *e)
 #endif
   lv_obj_set_style_text_font(provInfoLabel, &lv_font_montserrat_14, 0);
 
-  if (WifiProvBleAvailable())
+  if (WifiProvBleAvailable() || WifiProvBleActive())
+  {
     provBleButton = addButton(provPanel, "BLE", LV_ALIGN_TOP_RIGHT, 0, 0, 90, startBle);
+    provBleLabel = lv_obj_get_child(provBleButton, 0);
+  }
   addButton(provPanel, "SoftAP", LV_ALIGN_TOP_RIGHT, 0, 44, 90, startSoftAp);
   addButton(provPanel, "Stop", LV_ALIGN_TOP_RIGHT, 0, 88, 90, stopProv);
   addButton(provPanel, "Close", LV_ALIGN_BOTTOM_RIGHT, 0, 0, 90, closePanel);
