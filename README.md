@@ -6,7 +6,7 @@ Main features are:
 * Can be integrated into a home automation system (such as Home Assistant)
 * Cloud connection not required
 * WiFi connected
-* Initial setup (e.g., WiFi credentials) configured via touch screen interface
+* Initial setup (e.g., WiFi credentials) configured via touch screen interface, or by Wi-Fi provisioning from a phone (see [Wi-Fi provisioning](#wi-fi-provisioning))
 * Will act similarly to a person's preferences when it comes to HVAC. For example:
     * the temperature set should be dependent upon local forecast
     * If the outside temp is close to the set thermostat temp, suggest opening a window
@@ -301,3 +301,12 @@ Then run the ```esp-coredump``` utility to analyze a core dump file. It will be 
 Another possible location for chip ELF files:
 ```~/.platformio/tools/tool-esp-rom-elfs/```
 
+## Wi-Fi provisioning
+
+Wi-Fi credentials can be sent to the thermostat from a phone using the Espressif "ESP SoftAP Provisioning" app (iOS / Android), instead of typing them on the touch screen.
+
+* If no Wi-Fi credentials are stored when the thermostat starts, provisioning begins automatically and the provisioning screen opens.
+* Otherwise, open the Wi-Fi config screen, tap **Prov**, then choose **SoftAP**.
+* Scan the QR code shown on the screen with the app.
+* The credentials are saved once the thermostat connects to the network. Provisioning stops by itself after 5 minutes.
+* Entering credentials on the touch screen or over telnet still works.

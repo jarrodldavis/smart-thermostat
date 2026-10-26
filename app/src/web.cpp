@@ -356,6 +356,16 @@ httpd_uri_t uri_update = {
     .handler = fwUpdate,
     .user_ctx = NULL};
 
+static httpd_handle_t webServerHandle = NULL;
+
+// Shared with the Wi-Fi provisioning SoftAP scheme, which cannot start a
+// second HTTP server on the same port. Protocomm expects a pointer to the
+// httpd_handle_t, not the handle itself.
+void *webServerGetHandle()
+{
+  return webServerHandle != NULL ? (void *)&webServerHandle : NULL;
+}
+
 void webStart()
 {
   if (!WifiConnected())
@@ -364,10 +374,13 @@ void webStart()
   }
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  // Leave room for the provisioning endpoints when they share this server
+  config.max_uri_handlers = 16;
   httpd_handle_t server = NULL;
 
   if (httpd_start(&server, &config) == ESP_OK)
   {
+    webServerHandle = server;
     httpd_register_uri_handler(server, &uri_get);
     httpd_register_uri_handler(server, &uri_xml);
     httpd_register_uri_handler(server, &uri_button);
