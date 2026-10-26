@@ -754,12 +754,7 @@ void WifiProvisioned()
     {
       // Matter must own reconnects once it starts. Do not register the legacy
       // callbacks below, or leave any previously registered ones active.
-      if (s_wifi_event_group != NULL)
-      {
-        ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-        ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-        WifiDeregisterEventCallbacks();
-      }
+      WifiDeregisterEventCallbacks();
       // Geo-IP timezone discovery opens a TLS connection. Finish it while
       // provisioning has released its heap and before Matter reserves RAM.
       initTimeSntp();
