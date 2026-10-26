@@ -75,15 +75,16 @@ static void updateInfo()
   if (provBleButton != NULL)
   {
     const bool activeBle = WifiProvBleActive();
-    if (WifiProvBleAvailable() || activeBle)
+    const bool restartForBle = WifiProvBleUsedThisBoot() && !activeBle;
+    if (WifiProvBleAvailable() || activeBle || restartForBle)
       lv_obj_clear_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
     else
       lv_obj_add_flag(provBleButton, LV_OBJ_FLAG_HIDDEN);
-    if (activeBle)
+    if (activeBle || restartForBle)
       lv_obj_add_state(provBleButton, LV_STATE_DISABLED);
     else
       lv_obj_clear_state(provBleButton, LV_STATE_DISABLED);
-    const char *label = activeBle ? "BLE active" : "BLE";
+    const char *label = activeBle ? "BLE active" : restartForBle ? "Restart\nfor BLE" : "BLE";
     if (strcmp(lv_label_get_text(provBleLabel), label) != 0)
       lv_label_set_text(provBleLabel, label);
   }
@@ -92,7 +93,8 @@ static void updateInfo()
   {
 #if LV_USE_QRCODE
     lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, PROV_QR_SIZE + 8);
-    lv_label_set_text_fmt(provInfoLabel, "%s\n%s", WifiProvServiceName(), WifiProvStatusText());
+    lv_label_set_text_fmt(provInfoLabel, "%s\n%s%s", WifiProvServiceName(), WifiProvStatusText(),
+                          WifiProvBleUsedThisBoot() && !WifiProvBleActive() ? "\nRestart for BLE" : "");
 
     // Only regenerate the QR code when the payload changes
     const char *payload = WifiProvQrPayload();
@@ -135,6 +137,8 @@ static void updateInfo()
 #endif
     if (WifiProvBleAvailable())
       lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose BLE or SoftAP", WifiProvStatusText());
+    else if (WifiProvBleUsedThisBoot())
+      lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nUse SoftAP, or restart for BLE", WifiProvStatusText());
     else
       lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nUse SoftAP", WifiProvStatusText());
   }
@@ -157,10 +161,10 @@ static void closePanel(lv_event_t *e)
     provInfoLabel = NULL;
 #if LV_USE_QRCODE
     provQr = NULL;
-    provBleButton = NULL;
-    provBleLabel = NULL;
     provQrShown[0] = '\0';
 #endif
+    provBleButton = NULL;
+    provBleLabel = NULL;
   }
 }
 
@@ -208,7 +212,7 @@ static void openPanel(lv_event_t *e)
 #endif
   lv_obj_set_style_text_font(provInfoLabel, &lv_font_montserrat_14, 0);
 
-  if (WifiProvBleAvailable() || WifiProvBleActive())
+  if (WifiProvBleAvailable() || WifiProvBleActive() || WifiProvBleUsedThisBoot())
   {
     provBleButton = addButton(provPanel, "BLE", LV_ALIGN_TOP_RIGHT, 0, 0, 90, startBle);
     provBleLabel = lv_obj_get_child(provBleButton, 0);
