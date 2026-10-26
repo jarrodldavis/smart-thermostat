@@ -93,8 +93,7 @@ static void updateInfo()
   {
 #if LV_USE_QRCODE
     lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, PROV_QR_SIZE + 8);
-    lv_label_set_text_fmt(provInfoLabel, "%s\n%s%s", WifiProvServiceName(), WifiProvStatusText(),
-                          WifiProvBleUsedThisBoot() && !WifiProvBleActive() ? "\nRestart for BLE" : "");
+    lv_label_set_text_fmt(provInfoLabel, "%s\n%s", WifiProvServiceName(), WifiProvStatusText());
 
     // Only regenerate the QR code when the payload changes
     const char *payload = WifiProvQrPayload();
