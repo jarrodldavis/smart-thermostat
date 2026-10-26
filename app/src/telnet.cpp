@@ -1129,16 +1129,34 @@ bool telnetServiceRunning()
 
 esp_err_t telnetStart()
 {
+  if (telnetServiceRunning())
+    return ESP_OK;
+  if (!WifiConnected())
+    return ESP_ERR_INVALID_STATE;
+
+  // The state machine calls this repeatedly while the listener is stopped.
+  // Avoid allocating a task every 40 ms if the network or heap is unavailable.
+  static int64_t lastAttempt = -5000;
+  int64_t now = millis();
+  if (now - lastAttempt < 5000)
+    return ESP_ERR_INVALID_STATE;
+  lastAttempt = now;
   telnetState = STARTING;
 
   // xTaskCreatePinnedToCore (&telnetTask, "telnetTask", 8048, NULL, 5, NULL, 0);
-  xTaskCreate(
+  if (xTaskCreate(
       &telnetListenTask,
       "TelnetTask",
       8192,
       NULL,
       tskIDLE_PRIORITY,
-      &telnetTaskHandle);
+      &telnetTaskHandle) != pdPASS)
+  {
+    telnetState = NOT_LISTENING;
+    telnetTaskHandle = NULL;
+    ESP_LOGW(tag, "Could not allocate telnet task; will retry later");
+    return ESP_ERR_NO_MEM;
+  }
   return ESP_OK;
 }
 

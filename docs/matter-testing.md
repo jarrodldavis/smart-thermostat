@@ -162,5 +162,64 @@ blocking reconnect task from timing out during a rapidly opened next session.
    success and its post-session indicator. With QR enabled, check scannable codes.
 
 Preserve logs from before boot through each case. Compile checks do not establish
-on-device memory headroom. The final layer adds controller-read and runtime fixes
-needed for the complete validation described below.
+on-device memory headroom. The runtime fixes below provide the controller-read and memory behavior used
+for the complete validation results.
+
+## Runtime and controller fixes
+
+- LocalTemperature is provided through the public data-model API before adding
+  the thermostat model. This retains the 1,900 hundredths-Celsius test value and
+  avoids the SDK helper's internally managed attribute without a reader.
+- Sixteen dynamic Wi-Fi TX slots handle multi-fabric mDNS/CASE bursts. Eight slots
+  produced send-memory errors and delayed HomePod recovery; unused dynamic slots
+  do not permanently reserve packet buffers.
+- Touchscreen transfers use one DMA scanline at a time within each transaction,
+  retaining the existing LVGL draw buffer and avoiding allocations during crypto.
+- Logger sinks each receive their own `va_list`, and raw SDK message bodies are
+  preserved. The logger host tests cover filtering, formatting, and multiple sinks.
+- Telnet startup retries are bounded and allocation failure restores listener
+  state. Matter allocation diagnostics use nonallocating ROM output/backtraces.
+
+## Validation evidence
+
+These device results were captured on the final source before the history split.
+The intermediate layers are build-validated; they were not separately flashed.
+Reorganization preserves the final source tree, with this guide consolidating
+previous per-test history.
+
+| Scenario | Observed result |
+| --- | --- |
+| Fresh Matter BLE/Wi-Fi setup | Apple Home supplied Wi-Fi, committed fabrics, and read/wrote test modes; application saved credentials after BLE cleanup. No standalone provisioning session ran. |
+| BLE timeout | Real memory reclamation increased free internal heap from 37,696 to 106,080 bytes; restart reopened setup. |
+| BLE Stop → Network, same boot | Network commissioning completed with BLE advertising stopped. |
+| Matter paired reboot | Saved SSID/fabrics restored, HomePod subscriptions resumed, BLE memory reclaimed, timezone/SNTP completed, HTTP 200. |
+| Normal-logging multi-fabric startup | Two runs resumed HomePod sessions at 10.3/10.4 seconds; temperature reads followed at 10.9/11.2 seconds, without advertisement send errors. |
+| Matter SoftAP recovery | Cancellation, timeout, and bad-password recovery restored station connectivity and HTTP. |
+| Fresh non-Matter BLE setup | Wi-Fi-only BLE opened automatically, accepted phone credentials, reclaimed BTDM memory, initialized time, and returned to the thermostat. |
+| Non-Matter bad password → Stop | Authentication failure reported; original credentials restored and IP reacquired in about 2.9 seconds; HTTP 200. |
+| Rapid non-Matter BLE/SoftAP cancellation | In-place reconnect avoided old-task timeout and Wi-Fi-not-started errors; final recovery took about 3.1 seconds; HTTP 200. |
+| Close-only BLE and SoftAP | User confirmed both sessions stopped; station IP returned about 3.1 seconds after final closure; HTTP 200. |
+| BLE lifecycle indicators | User confirmed BLE active on initial setup and Restart for BLE after Stop/reopening; SoftAP status remained specific to its current session. |
+
+The final clean combined commissioning run had ELF prefix `439ab77093bf3b99` and
+90,864 free internal bytes after BLE reclamation. There were no allocation
+failures or aborts in that commissioning capture. Post-fix cancellation captures
+had no aborts/assertions. SDK warnings listed above remained distinct.
+
+Targeted host sanitizer checks covered display flush bounds, synchronized clock
+preservation, commissioning transport/restart guards, delayed credential saving
+(including 32-byte SSIDs and 64-byte PSKs), first-screen routing, cancellation
+recovery, and competing BLE claims. Ownership races were exercised 200 times per
+configuration with/without standalone BLE support. These are bounded test results,
+not a claim of indefinite soak coverage. One other saved Apple controller remained
+undiscoverable in prior multi-fabric testing while the active HomePod worked.
+
+A manual read baseline, using a separately installed CHIP Tool, is:
+
+```sh
+chip-tool pairing onnetwork 1 20202021
+chip-tool thermostat read local-temperature 1 1
+```
+
+Use the endpoint ID printed by the device if it differs from `1`. Matter values
+remain test attributes; live HVAC relay integration is separate.

@@ -16,7 +16,10 @@ CONFIG_ESP_WIFI_RX_IRAM_OPT=n
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
 CONFIG_ESP_WIFI_RX_BA_WIN=4
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
-CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=8
+# Multiple commissioned fabrics produce bursts of mDNS announcements and CASE
+# traffic. Keep enough dynamic TX slots for those bursts; unused slots do not
+# reserve packet buffers permanently.
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
 # Allocate Matter session/read-handler objects when used, rather than reserving
 # all pool entries alongside the display and application task stacks at boot.
 CONFIG_CHIP_SYSTEM_CONFIG_POOL_USE_HEAP=y
