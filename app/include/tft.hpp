@@ -170,6 +170,11 @@ void my_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
     data->point.x = touchX;
     data->point.y = touchY;
 
+    // A touch on any screen must wake a sleeping display
+    extern bool tftAwake;
+    if (!tftAwake)
+      tftWakeDisplay(false);
+
 //    Serial.printf ("Touch X: %d  Y: %d\n", touchX, touchY);
   }
 }

@@ -483,7 +483,7 @@ void setDefaultWifiCreds()
 void setWifiCreds()
 {
   ESP_LOGW(TAG, "Saving latest WIFI credentials to NVS");
-  // printf ("*** [setWifiCreds] WifiCreds.password = %s\n", WifiCreds.password);
+  // printf ("*** [setWifiCreds] WifiCreds.password = ******\n");
   nvs_handle_t my_handle;
   openNVS(&my_handle, NVS_WIFI_TAG);
   nvs_writeString(my_handle, "hostname", OperatingParameters.DeviceName);
@@ -505,7 +505,7 @@ void getWifiCreds()
   nvs_readStr(my_handle, "hostname", "thermostat", OperatingParameters.DeviceName, sizeof(OperatingParameters.DeviceName));
   nvs_readStr(my_handle, "ssid", "", WifiCreds.ssid, sizeof(WifiCreds.ssid));
   nvs_readStr(my_handle, "pass", "", WifiCreds.password, sizeof(WifiCreds.password));
-  // printf ("*** [getWifiCreds] WifiCreds.password = %s\n", WifiCreds.password);
+  // printf ("*** [getWifiCreds] WifiCreds.password = ******\n");
   closeNVS(my_handle);
 }
 
