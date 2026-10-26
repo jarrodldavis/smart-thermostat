@@ -437,14 +437,9 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
     // Consume before init so failure paths cannot retry BLE in this boot.
     bleAvailableThisBoot = false;
     config.scheme = wifi_prov_scheme_ble;
-#ifdef MATTER_ENABLED
-    // The transport still stops/deinitializes its NimBLE host. Avoid the
-    // irreversible memory release so Matter can initialize its own host later,
-    // even if Matter is currently disabled in Settings.
-    config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
-#else
+    // Both provisioning profiles stop the host and permanently reclaim its
+    // Bluetooth memory. Another BLE user requires a reboot after this session.
     config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
-#endif
   }
   else
 #endif
