@@ -758,8 +758,24 @@ void WifiProvAborted()
 #endif
   if (strlen(WifiCreds.ssid) > 0)
   {
-    WifiStatus.reconnect_requested = true;
-    lastWifiReconnect = 0;
+    // Provisioning kept the driver/netif alive and restored its station config.
+    // Reconnect in place: a full WifiReconnect task tears down that driver and
+    // waits for IP, which races with immediately opening another session.
+    WifiStatus.Connected = false;
+    OperatingParameters.wifiConnected = false;
+    lastWifiReconnect = millis();
+    esp_err_t err = esp_wifi_connect();
+    if (err == ESP_OK)
+    {
+      WifiStatus.reconnect_requested = false;
+      ESP_LOGI(TAG, "Resuming restored Wi-Fi connection after provisioning");
+    }
+    else
+    {
+      ESP_LOGW(TAG, "Could not resume restored Wi-Fi: %s", esp_err_to_name(err));
+      WifiStatus.reconnect_requested = true;
+      lastWifiReconnect = 0;
+    }
   }
 }
 
