@@ -43,6 +43,10 @@ static void refreshPairing(lv_timer_t *)
   const bool canChoose = state.started && !state.paired && !state.sessionActive;
   enabled(networkButton, canChoose && state.wifiConnected);
   enabled(bleButton, canChoose && state.bleSupported);
+  if (state.bleSupported)
+    lv_obj_clear_flag(bleButton, LV_OBJ_FLAG_HIDDEN);
+  else
+    lv_obj_add_flag(bleButton, LV_OBJ_FLAG_HIDDEN);
   enabled(stopButton, state.started && !state.paired && state.windowOpen);
   const bool bleActive = state.windowOpen && state.transport == MATTER_PAIRING_TRANSPORT::BLE;
   labelText(bleLabel, bleActive ? "BLE active" : !state.paired && state.bleRestartRequired ? "Restart\nfor BLE" : "BLE");

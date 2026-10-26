@@ -763,8 +763,6 @@ void WifiProvisioned()
       if (OperatingParameters.MatterStarted)
       {
         updateTimeSntp();
-        MatterOpenCommissioningWindow(MATTER_PAIRING_TRANSPORT::NETWORK);
-        UiMatterRequestShow();
       }
     }
     if (OperatingParameters.MatterStarted)

@@ -205,9 +205,21 @@ static void provFinishTask(void *arg)
     memset(&previousStaConfig, 0, sizeof(previousStaConfig));
     previousStaConfigValid = false;
     // The station is already connected; keep that connection
+#ifdef MATTER_ENABLED
+    const bool matterWasStarted = OperatingParameters.MatterStarted;
+#endif
     WifiProvisioned();
     provActive = false;
     UiProvRequestDismiss();
+#ifdef MATTER_ENABLED
+    // The CHIP task rejects commissioning while provisioning is active.
+    // Publish completion before scheduling the first network pairing window.
+    if (!matterWasStarted && OperatingParameters.MatterStarted)
+    {
+      MatterOpenCommissioningWindow(MATTER_PAIRING_TRANSPORT::NETWORK);
+      UiMatterRequestShow();
+    }
+#endif
   }
   else
   {

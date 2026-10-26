@@ -26,6 +26,9 @@
 #include "esp_timer.h"
 #include "version.h"
 #include "logger.h"
+#ifdef MATTER_ENABLED
+#include <platform/CHIPDeviceConfig.h>
+#endif
 
 #define TAG "Main"
 
