@@ -143,13 +143,21 @@ void WiFi_SsidScanExisting(void)
 
   memset(ap_info, 0, sizeof(ap_info));
 
-  esp_wifi_stop();
-  WifiStatus.wifi_started = false;
-
-  if (!WifiStart("", "", ""))
+  // Matter owns the driver and reconnect state. Scan its running station
+  // directly; stopping it here leaves WifiStart's adoption path unable to
+  // restart the radio and disconnects every paired controller.
+#ifdef MATTER_ENABLED
+  if (!OperatingParameters.MatterStarted)
+#endif
   {
-    ESP_LOGE (TAG, "Failed to start wifi to perform scan.");
-    ap_count = 0;
+    esp_wifi_stop();
+    WifiStatus.wifi_started = false;
+
+    if (!WifiStart("", "", ""))
+    {
+      ESP_LOGE (TAG, "Failed to start wifi to perform scan.");
+      ap_count = 0;
+    }
   }
 
   esp_wifi_scan_start(&scan_config, true);
