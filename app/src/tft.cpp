@@ -421,6 +421,12 @@ void tftInit()
   lv_indev_drv_register(&indev_drv);
   
   ui_init();
+#ifndef MQTT_ENABLED
+  // Apply build-specific visibility before a screen transition can draw the
+  // generated MQTT controls. The screen-loaded callback runs after animation.
+  lv_obj_add_flag(ui_SetupMqttBtn, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(ui_SetupMqttLabel, LV_OBJ_FLAG_HIDDEN);
+#endif
   UiProvInit();
 
   setHvacModesDropdown();
