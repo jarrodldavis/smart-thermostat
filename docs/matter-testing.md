@@ -182,10 +182,10 @@ for the complete validation results.
 
 ## Validation evidence
 
-These device results were captured on the final source before the history split.
+These device results were captured with BLE and QR rendering enabled before the history split.
 The intermediate layers are build-validated; they were not separately flashed.
-Reorganization preserves the final source tree, with this guide consolidating
-previous per-test history.
+This guide consolidates that previous per-test history; the new default SoftAP
+and manual-code commissioning flow still needs fresh on-device validation.
 
 | Scenario | Observed result |
 | --- | --- |
