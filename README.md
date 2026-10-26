@@ -307,6 +307,7 @@ Wi-Fi credentials can be sent to the thermostat from a phone using the Espressif
 
 * If no Wi-Fi credentials are stored when the thermostat starts, provisioning begins automatically and the provisioning screen opens.
 * Otherwise, open the Wi-Fi config screen, tap **Prov**, then choose **SoftAP**.
-* Scan the QR code shown on the screen with the app.
+* Use the service name, SoftAP password, and proof of possession (PoP) shown on screen to provision manually in the app.
+* QR rendering is optional: add `-D LV_USE_QRCODE=1` to the environment's `build_flags` to scan a code instead.
 * The credentials are saved once the thermostat connects to the network. Provisioning stops by itself after 5 minutes.
 * Entering credentials on the touch screen or over telnet still works.

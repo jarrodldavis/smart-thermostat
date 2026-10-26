@@ -23,9 +23,13 @@
 static lv_obj_t *provButton = NULL;
 static lv_obj_t *provPanel = NULL;
 static lv_obj_t *provInfoLabel = NULL;
+#if LV_USE_QRCODE
 static lv_obj_t *provQr = NULL;
+#endif
 static lv_timer_t *provTimer = NULL;
+#if LV_USE_QRCODE
 static char provQrShown[200] = "";
+#endif
 static volatile bool showRequested = false;
 static volatile bool dismissRequested = false;
 
@@ -55,6 +59,12 @@ static lv_obj_t *addButton(lv_obj_t *parent, const char *text, lv_align_t align,
   return btn;
 }
 
+static void showCredentials()
+{
+  lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, 0);
+  lv_label_set_text_fmt(provInfoLabel, "%s\n\n%s", WifiProvCredentialsText(), WifiProvStatusText());
+}
+
 static void updateInfo()
 {
   if (provInfoLabel == NULL)
@@ -62,6 +72,8 @@ static void updateInfo()
 
   if (WifiProvActive())
   {
+#if LV_USE_QRCODE
+    lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, PROV_QR_SIZE + 8);
     lv_label_set_text_fmt(provInfoLabel, "%s\n%s", WifiProvServiceName(), WifiProvStatusText());
 
     // Only regenerate the QR code when the payload changes
@@ -71,7 +83,7 @@ static void updateInfo()
       provQr = lv_qrcode_create(provPanel, PROV_QR_SIZE, lv_color_black(), lv_color_white());
       if (provQr == NULL)
       {
-        lv_label_set_text(provInfoLabel, "Not enough memory for QR.\nStop and retry provisioning.");
+        showCredentials();
         return;
       }
       lv_obj_align(provQr, LV_ALIGN_TOP_LEFT, 0, 0);
@@ -83,21 +95,26 @@ static void updateInfo()
       if (lv_qrcode_update(provQr, payload, strlen(payload)) != LV_RES_OK)
       {
         lv_obj_add_flag(provQr, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(provInfoLabel, "Could not render QR.\nStop and retry provisioning.");
+        showCredentials();
         return;
       }
       lv_obj_clear_flag(provQr, LV_OBJ_FLAG_HIDDEN);
       strlcpy(provQrShown, payload, sizeof(provQrShown));
     }
+#else
+    showCredentials();
+#endif
   }
   else
   {
+#if LV_USE_QRCODE
     if (provQr != NULL)
     {
       lv_obj_del(provQr);
       provQr = NULL;
       provQrShown[0] = '\0';
     }
+#endif
     lv_label_set_text_fmt(provInfoLabel, "Wi-Fi provisioning\n%s\nChoose SoftAP", WifiProvStatusText());
   }
 }
@@ -117,8 +134,10 @@ static void closePanel(lv_event_t *e)
     lv_obj_del(provPanel);
     provPanel = NULL;
     provInfoLabel = NULL;
+#if LV_USE_QRCODE
     provQr = NULL;
     provQrShown[0] = '\0';
+#endif
   }
 }
 
@@ -150,10 +169,15 @@ static void openPanel(lv_event_t *e)
   lv_obj_clear_flag(provPanel, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(provPanel, 4, 0);
 
-  // Info text sits under the QR code (which is created on demand)
+  // Text credentials use the full left column when QR rendering is disabled.
   provInfoLabel = lv_label_create(provPanel);
   lv_obj_set_width(provInfoLabel, 200);
+#if LV_USE_QRCODE
   lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, PROV_QR_SIZE + 8);
+#else
+  lv_obj_align(provInfoLabel, LV_ALIGN_TOP_LEFT, 0, 0);
+#endif
+  lv_obj_set_style_text_font(provInfoLabel, &lv_font_montserrat_14, 0);
 
   addButton(provPanel, "SoftAP", LV_ALIGN_TOP_RIGHT, 0, 44, 90, startSoftAp);
   addButton(provPanel, "Stop", LV_ALIGN_TOP_RIGHT, 0, 88, 90, stopProv);

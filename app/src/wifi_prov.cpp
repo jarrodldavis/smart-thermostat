@@ -286,6 +286,25 @@ const char *WifiProvServiceName()
   return provServiceName;
 }
 
+// Only expose session credentials while provisioning is active. Do not log them.
+const char *WifiProvCredentialsText()
+{
+  static char text[160];
+  if (!provActive)
+    return "";
+  const bool softAp = provTransport == WIFI_PROV_TRANSPORT_SOFTAP;
+#ifdef WIFI_PROV_USE_SEC2
+  snprintf(text, sizeof(text), "Name: %s\n%s%s%sUsername: %s\nPassword: %s",
+           provServiceName, softAp ? "AP password: " : "", softAp ? provSoftApKey : "",
+           softAp ? "\n" : "", PROV_USERNAME, provSecret);
+#else
+  snprintf(text, sizeof(text), "Name: %s\n%s%s%sPoP: %s",
+           provServiceName, softAp ? "AP password: " : "", softAp ? provSoftApKey : "",
+           softAp ? "\n" : "", provSecret);
+#endif
+  return text;
+}
+
 const char *WifiProvQrPayload()
 {
   return provQr;
