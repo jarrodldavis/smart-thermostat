@@ -533,11 +533,6 @@ void WifiSwitchMatterMode()
     ESP_LOGI(TAG, "Enabling Matter");
     // Since we are shutting down wifi to enable Matter,
     // do not allow callbacks to take any action.
-    if (s_wifi_event_group != NULL)
-    {
-      ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-      ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-    }
     WifiDeregisterEventCallbacks();
     ESP_LOGI(TAG, "Shutting down wifi connection");
     WifiDisconnect();
