@@ -90,11 +90,14 @@ bool MatterInit()
     return false;
   }
 
+#if CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE
   if (!WifiProvClaimBleForMatter())
   {
     ESP_LOGW(TAG, "BLE was already claimed this boot; restart before starting Matter");
     return false;
   }
+
+#endif
 
   WifiSetCredentials(WifiCreds.ssid, WifiCreds.password);
   esp_log_level_set("*", ESP_LOG_DEBUG);

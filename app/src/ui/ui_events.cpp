@@ -465,7 +465,7 @@ bool isCurrentScreenMain()
  */
 void lv_example_qrcode_1()
 {
-#ifdef MATTER_ENABLED
+#if defined(MATTER_ENABLED) && LV_USE_QRCODE
     lv_color_t bg_color = lv_palette_lighten(LV_PALETTE_LIGHT_BLUE, 5);
     lv_color_t fg_color = lv_palette_darken(LV_PALETTE_BLUE, 4);
 

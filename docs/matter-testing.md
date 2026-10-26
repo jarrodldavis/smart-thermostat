@@ -61,6 +61,13 @@ Use `pio run -e esp32s3-matter -t menuconfig` to edit Matter settings, then
 combined configuration; copy Matter-specific changes into `sdkconfig.matter.defaults`
 and shared changes into `sdkconfig.defaults`.
 
+BLE commissioning and QR rendering are opt-in. To enable Matter over BLE, use
+`menuconfig` to enable Bluetooth, the NimBLE host, and CHIP-over-BLE, then record
+those choices in `sdkconfig.matter.defaults`. To enable rendered QR codes, add
+`-D LV_USE_QRCODE=1` to the environment's `build_flags` in `platformio.ini`.
+With the default configuration, use SoftAP to set up Wi-Fi and the manual Matter
+pairing code to commission over the network.
+
 The setup passcode is **20202021**, discriminator **3840**. Example attestation
 credentials can produce a development/certification warning in controllers.
 
