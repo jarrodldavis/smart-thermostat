@@ -1,8 +1,12 @@
 {
 	"folders": [
 		{
-			"name": "SmartThermostat",
+			"name": "app",
 			"path": "."
+		},
+		{
+			"name": "root",
+			"path": ".."
 		}
 	],
 	"settings": {
@@ -68,7 +72,7 @@
 			"cinttypes": "cpp",
 			"typeinfo": "cpp"
 		},
-    "editor.tabSize": 2,
-    "editor.detectIndentation": false
+		"editor.tabSize": 2,
+		"editor.detectIndentation": false
 	}
 }
