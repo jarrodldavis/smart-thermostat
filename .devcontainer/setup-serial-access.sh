@@ -39,9 +39,15 @@ map_host_gid() {
 # container's own /dev filesystem.
 #
 
-if [[ -d $HOST_DEV/serial ]]; then
-    ln -sfn "$HOST_DEV/serial" /dev/serial
-fi
+ln -sfn "$HOST_DEV/serial" /dev/serial
+
+#
+# Expose the host's primary serial devices to the container.
+# The PlatformIO development environment typically uses these device names.
+#
+
+ln -sfn "$HOST_DEV/ttyACM0" /dev/ttyACM0
+ln -sfn "$HOST_DEV/ttyUSB0" /dev/ttyUSB0
 
 #
 # Discover the GIDs used by host serial devices.
