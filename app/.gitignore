@@ -4,3 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 lib
+
+# Generated ESP-IDF configuration for the normal PlatformIO environment.
+sdkconfig.esp32s3
+sdkconfig.*.old

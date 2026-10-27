@@ -470,22 +470,20 @@ void WifiDeregisterEventCallbacks()
 {
   ESP_LOGD(TAG, "WifiDeregisterEventCallbacks()");
 
-  if (s_wifi_event_group == NULL)
+  // Remove both handler instances before deleting the group they access.
+  // Unregistering synchronizes with callbacks running on the event loop.
+  if (instance_got_ip != NULL)
   {
-    ESP_LOGW(TAG, "- Callbacks already deregistered");
-    return;
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
+    instance_got_ip = NULL;
   }
-  else
+  if (instance_any_id != NULL)
   {
-    //@@@
-    // Not sure this code change is correct. The ESP-IDF documentation says that the unregister call will not work
-    // if the event handler was registered with esp_event_handler_instance_register(). The code here uses that function
-    // to register the event handler, so the unregister calls below will not work. The code below is commented out for 
-    // now, but it should be revisited later to see if it can be fixed.
-    /* The event will not be processed after unregister */
-    // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-    // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+    instance_any_id = NULL;
+  }
+  if (s_wifi_event_group != NULL)
+  {
     vEventGroupDelete(s_wifi_event_group);
     s_wifi_event_group = NULL;
   }
@@ -495,7 +493,7 @@ void WifiRegisterEventCallbacks()
 {
   ESP_LOGD(TAG, "WifiRegisterEventCallbacks()");
 
-  if (s_wifi_event_group != NULL)
+  if (s_wifi_event_group != NULL || instance_any_id != NULL || instance_got_ip != NULL)
   {
     ESP_LOGI(TAG, "- Callbacks were already registered - Removing first");
     WifiDeregisterEventCallbacks();
@@ -504,6 +502,7 @@ void WifiRegisterEventCallbacks()
 
   /* Initialize event group */
   s_wifi_event_group = xEventGroupCreate();
+  ESP_ERROR_CHECK(s_wifi_event_group != NULL ? ESP_OK : ESP_ERR_NO_MEM);
 
   /* Register Event handler */
   ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
