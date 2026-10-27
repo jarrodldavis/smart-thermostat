@@ -51,7 +51,9 @@
 #define DEF_MQTT_USER "mqtt"
 #define DEF_MQTT_PASS "mqtt"
 #define DEF_MQTT_PORT 1883
+#ifndef DEF_MATTER_ENABLE
 #define DEF_MATTER_ENABLE false
+#endif
 
 //@@@
 //Timezone info, such as "America/New York"
@@ -390,7 +392,7 @@ void updateThermostatParams()
   nvs_writeInt16(my_handle, "MqttBrokerPort", OperatingParameters.MqttBrokerPort);
 #endif
 #ifdef MATTER_ENABLED
-  nvs_writeBool(my_handle, "MatterEn", &OperatingParameters.MatterEnabled);
+  nvs_writeBool(my_handle, "MatterEn", OperatingParameters.MatterEnabled);
 #endif
   closeNVS(my_handle);
 }

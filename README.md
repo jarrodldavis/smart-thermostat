@@ -39,7 +39,7 @@ Telnet support has been added! There is no credential checking mechanism, but th
 
 Getting started: https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html
 
-Matter support is delayed until the SDK can be added as a library to PlatformIO. Currently, the actions required to create a dev environment is too extreme.
+An experimental PlatformIO Matter build is available for connectivity and provisioning tests. See [Matter testing](docs/matter-testing.md) for build, flash, commissioning, and reproduction instructions. Matter control of the HVAC relays is not implemented.
 
 # September 8, 2023 update - V0.6
 

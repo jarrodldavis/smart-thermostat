@@ -412,12 +412,14 @@ void stateMachine(void *parameter)
       // NB: We never set MqttConnectCalled to false so it is only ever
       // called once at startup. The MQTT subsystem handles reconnects.
       //
+#ifdef MQTT_ENABLED
       if (is_mqtt_enabled(&OperatingParameters) &&
           !is_mqtt_connected(&OperatingParameters) && !MqttConnectCalled)
       {
         MqttConnectCalled = true;
         MqttConnect();
       }
+#endif
     }
 
     // Determine if it's time to update the SNTP sourced clock and
@@ -436,11 +438,18 @@ void stateMachine(void *parameter)
 
 void stateCreateTask()
 {
-  xTaskCreate(
+  // Reserve the control task's original 8 KB stack before optional network
+  // services consume the heap. ESP-IDF specifies task stack sizes in bytes.
+  alignas(portBYTE_ALIGNMENT) static StackType_t stack[8192];
+  static StaticTask_t taskStorage;
+  TaskHandle_t task = xTaskCreateStatic(
       stateMachine,
       "State Machine",
-      8192,
+      sizeof(stack),
       NULL,
       tskIDLE_PRIORITY, // - 1,
-      NULL);
+      stack,
+      &taskStorage);
+  ESP_ERROR_CHECK(task != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+  ESP_LOGI("State Machine", "Control task started with reserved 8192-byte stack");
 }

@@ -4,7 +4,10 @@
 .vscode/launch.json
 .vscode/ipch
 lib
+managed_components/
+dependencies.lock
 
-# Generated ESP-IDF configuration for the normal PlatformIO environment.
+# Generated ESP-IDF configurations; commit defaults instead.
 sdkconfig.esp32s3
+sdkconfig.esp32s3-matter
 sdkconfig.*.old

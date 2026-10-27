@@ -74,6 +74,8 @@ void app_main()
   ESP_LOGI (TAG, "Initializing sensors");
   sensorsInit();
 
+  ESP_ERROR_CHECK(esp_netif_init());
+
 #ifdef MATTER_ENABLED
   // Start Matter
   ESP_LOGI (TAG, "Starting Matter");
@@ -82,7 +84,6 @@ void app_main()
 
   // Start wifi
   ESP_LOGI (TAG, "Starting wifi (\"%s\", ******)", WifiCreds.ssid);
-  ESP_ERROR_CHECK(esp_netif_init());
   OperatingParameters.wifiConnected = 
     // wifiStart(WifiCreds.hostname, WifiCreds.ssid, WifiCreds.password);
     WifiStart(OperatingParameters.DeviceName, WifiCreds.ssid, WifiCreds.password);

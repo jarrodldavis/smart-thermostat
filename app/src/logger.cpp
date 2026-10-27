@@ -70,8 +70,10 @@ int localLogger(const char *fmt, va_list list)
   level = map_char_to_level(fmt[idx]);
   ret = -1;
 
+#ifdef TELNET_ENABLED
   if (telnet_logging_active && (level <= telnet_log_level))
     ret = telnet_esp32_vprintf(fmt, list);
+#endif
 
   if (sdcard_logging_active && (level <= sdcard_log_level))
     ret = sdcard_esp32_vprintf(fmt, list);
