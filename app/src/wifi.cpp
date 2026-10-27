@@ -130,8 +130,8 @@ void WiFi_SsidScanExisting(void)
   scan_config.scan_time = scan_time;
   scan_config.home_chan_dwell_time = 0;
   //@@@scan_config.coex_background_scan = false;
-  scan_config.channel_bitmap.ghz_2_channels = 0x3FFF; // scan all 2.4 GHz channels
-  scan_config.channel_bitmap.ghz_5_channels = 0xFFFFFFFF; // scan all 5 GHz channels
+  // Leave the bitmap empty to scan all channels allowed by the driver and
+  // country configuration; the ESP32-S3 does not support 5 GHz channels.
 
   if (wifiConnecting)
   {
@@ -143,13 +143,21 @@ void WiFi_SsidScanExisting(void)
 
   memset(ap_info, 0, sizeof(ap_info));
 
-  esp_wifi_stop();
-  WifiStatus.wifi_started = false;
-
-  if (!WifiStart("", "", ""))
+  // Matter owns the driver and reconnect state. Scan its running station
+  // directly; stopping it here leaves WifiStart's adoption path unable to
+  // restart the radio and disconnects every paired controller.
+#ifdef MATTER_ENABLED
+  if (!OperatingParameters.MatterStarted)
+#endif
   {
-    ESP_LOGE (TAG, "Failed to start wifi to perform scan.");
-    ap_count = 0;
+    esp_wifi_stop();
+    WifiStatus.wifi_started = false;
+
+    if (!WifiStart("", "", ""))
+    {
+      ESP_LOGE (TAG, "Failed to start wifi to perform scan.");
+      ap_count = 0;
+    }
   }
 
   esp_wifi_scan_start(&scan_config, true);

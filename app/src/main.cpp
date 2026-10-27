@@ -28,6 +28,19 @@
 #include "logger.h"
 #ifdef MATTER_ENABLED
 #include <platform/CHIPDeviceConfig.h>
+#include "esp_heap_caps.h"
+#include "esp_rom_sys.h"
+#include "esp_debug_helpers.h"
+
+static void allocationFailed(size_t size, uint32_t caps, const char *function)
+{
+  // This callback must not allocate memory or go through the normal logger.
+  esp_rom_printf("Allocation failed: task=%s function=%s requested=%u caps=0x%x free=%u largest=%u\n",
+                 pcTaskGetName(NULL), function, (unsigned)size, (unsigned)caps,
+                 (unsigned)heap_caps_get_free_size(caps),
+                 (unsigned)heap_caps_get_largest_free_block(caps));
+  esp_backtrace_print(12);
+}
 #endif
 
 #define TAG "Main"
@@ -53,6 +66,9 @@ void app_main()
   // Set up logging function to customize the console, telnet and SD Card
   // Logging plumbing and log levels.
   loggerEnableLocalLogging();
+#ifdef MATTER_ENABLED
+  ESP_ERROR_CHECK(heap_caps_register_failed_alloc_callback(allocationFailed));
+#endif
 
   ESP_LOGI (TAG, "IDF version: %s", esp_get_idf_version());
   ESP_LOGD (TAG, "- Free memory: %d bytes", esp_get_free_heap_size());
@@ -150,5 +166,10 @@ void app_main()
 
   // Play the startup sound
   audioStartupBeep();
+#ifdef MATTER_ENABLED
+  ESP_LOGI(TAG, "Startup heap: free_internal=%u largest_internal=%u",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+#endif
   ESP_LOGI (TAG, "Startup done");
 }

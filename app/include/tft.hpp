@@ -153,7 +153,13 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
   uint32_t h = (area->y2 - area->y1 + 1);
   tft.startWrite();
   tft.setAddrWindow(area->x1, area->y1, w, h);
-  tft.writePixels((lgfx::rgb565_t *)&color_p->full, w * h);
+  // LovyanGFX reserves one scanline of DMA buffers at panel initialization.
+  // Larger writes grow those buffers mid-draw, which can fail while a secure
+  // provisioning session is using the heap. Keep every transfer within that
+  // reserved size while retaining LVGL's multi-row rendering buffer.
+  auto *pixels = reinterpret_cast<lgfx::rgb565_t *>(color_p);
+  for (uint32_t row = 0; row < h; ++row)
+    tft.writePixels(pixels + row * w, w);
   tft.endWrite();
   lv_disp_flush_ready(disp);
 }

@@ -61,29 +61,38 @@ esp_log_level_t map_char_to_level(char c)
 
 int localLogger(const char *fmt, va_list list)
 {
-  static int ret;
-  static int idx;
-  static int level;
+  int ret = 0;
+  const char *prefix = fmt;
+  if (prefix[0] == 0x1b /* ESC */)
+  {
+    const char *end = strchr(prefix, 'm');
+    if (end != NULL)
+      prefix = end + 1;
+  }
 
-  idx = 0;
-  if (fmt[0] == 0x1b /* ESC */) idx = 7;
-  level = map_char_to_level(fmt[idx]);
-  ret = -1;
+  // CHIP and the Wi-Fi driver send message bodies without an ESP-IDF prefix.
+  // Their callers already filter by severity; interpreting the first letter
+  // of the message as a level discards valid messages (e.g. "Device state...").
+  bool hasLevel = strchr("EWIDV", prefix[0]) != NULL && prefix[0] != '\0' &&
+                  prefix[1] == ' ' && prefix[2] == '(';
+  esp_log_level_t level = hasLevel ? map_char_to_level(prefix[0]) : ESP_LOG_NONE;
+  auto writeTo = [&](vprintf_like_t sink, esp_log_level_t threshold) {
+    if (sink == NULL || threshold == ESP_LOG_NONE || (hasLevel && level > threshold))
+      return;
+    // Each sink consumes its own argument list; do not share it across sinks.
+    va_list copy;
+    va_copy(copy, list);
+    ret = sink(fmt, copy);
+    va_end(copy);
+  };
 
 #ifdef TELNET_ENABLED
-  if (telnet_logging_active && (level <= telnet_log_level))
-    ret = telnet_esp32_vprintf(fmt, list);
+  if (telnet_logging_active)
+    writeTo(telnet_esp32_vprintf, telnet_log_level);
 #endif
-
-  if (sdcard_logging_active && (level <= sdcard_log_level))
-    ret = sdcard_esp32_vprintf(fmt, list);
-
-  if (level <= console_log_level)
-  {
-    if (OrigEsplogger == NULL)
-      esp_restart();
-    ret = OrigEsplogger(fmt, list);
-  }
+  if (sdcard_logging_active)
+    writeTo(sdcard_esp32_vprintf, sdcard_log_level);
+  writeTo(OrigEsplogger, console_log_level);
 
   return ret;
 }

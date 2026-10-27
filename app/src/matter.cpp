@@ -266,23 +266,31 @@ bool MatterInit()
       cluster::thermostat::feature::cooling::get_id();
   thermostat_config.thermostat.features.heating.occupied_heating_setpoint = 2300;
   thermostat_config.thermostat.features.cooling.occupied_cooling_setpoint = 2600;
-  endpoint_t *thermostat_endpoint = endpoint::thermostat::create(
-      node, &thermostat_config, ENDPOINT_FLAG_NONE, nullptr);
+  endpoint_t *thermostat_endpoint = endpoint::create(node, ENDPOINT_FLAG_NONE, nullptr);
   if (thermostat_endpoint == nullptr)
   {
     ESP_LOGE(TAG, "Failed to create thermostat endpoint");
+    return false;
+  }
+  // Predefine LocalTemperature using the public data-model API. This SDK's
+  // thermostat helper marks it internally managed, but supplies no internal
+  // reader for the exposed-temperature feature, so controller reads fail.
+  // The helper retains attributes already supplied by the application.
+  cluster_t *thermostat_cluster = cluster::create(thermostat_endpoint, Thermostat::Id, CLUSTER_FLAG_SERVER);
+  if (cluster::descriptor::create(thermostat_endpoint, &thermostat_config.descriptor, CLUSTER_FLAG_SERVER) == nullptr ||
+      thermostat_cluster == nullptr ||
+      attribute::create(thermostat_cluster, Thermostat::Attributes::LocalTemperature::Id,
+                        ATTRIBUTE_FLAG_NULLABLE,
+                        esp_matter_nullable_int16(thermostat_config.thermostat.local_temperature)) == nullptr ||
+      endpoint::thermostat::add(thermostat_endpoint, &thermostat_config) != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to configure thermostat endpoint");
     return false;
   }
   ESP_LOGI(TAG, "Thermostat endpoint_id = %u", endpoint::get_id(thermostat_endpoint));
 
   // These optional attributes moved out of the heating/cooling feature config
   // in the current SDK. Preserve the original limits and demand values.
-  cluster_t *thermostat_cluster = cluster::get(thermostat_endpoint, Thermostat::Id);
-  if (thermostat_cluster == nullptr)
-  {
-    ESP_LOGE(TAG, "Failed to get thermostat cluster");
-    return false;
-  }
   namespace thermostat_attributes = cluster::thermostat::attribute;
   attribute_t *optional_attributes[] = {
       thermostat_attributes::create_abs_min_heat_setpoint_limit(thermostat_cluster, 1500),
