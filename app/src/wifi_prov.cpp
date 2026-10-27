@@ -6,7 +6,9 @@
  *
  * Wi-Fi provisioning using the ESP-IDF "wifi_provisioning" component.
  * Credentials can be supplied from a phone using the Espressif
- * "ESP SoftAP Provisioning" app using the SoftAP (HTTP) transport.
+ * "ESP SoftAP Prov" or "ESP BLE Provisioning" apps. Both the SoftAP (HTTP)
+ * and BLE (NimBLE) transports are supported; BLE requires CONFIG_BT_ENABLED
+ * and CONFIG_BT_NIMBLE_ENABLED in sdkconfig.
  */
 
 #include <string.h>
@@ -31,12 +33,39 @@
 #define WIFI_PROV_USE_SEC2 1
 #include "esp_srp.h"
 #endif
+#if defined(CONFIG_BT_ENABLED) && defined(CONFIG_BT_NIMBLE_ENABLED)
+#define WIFI_PROV_BLE_AVAILABLE 1
+#include "wifi_provisioning/scheme_ble.h"
+#endif
 
 static const char *TAG = "WIFI_PROV";
 
 #define PROV_TIMEOUT_US (5LL * 60 * 1000 * 1000)
 
 static volatile bool provActive = false;
+// Whichever stack claims BLE first owns its one use for this boot. Releasing
+// Bluetooth memory never makes it available again without a restart.
+enum class BleOwner { AVAILABLE, WIFI_PROVISIONING, MATTER };
+static BleOwner bleOwner = BleOwner::AVAILABLE;
+static portMUX_TYPE bleOwnerMux = portMUX_INITIALIZER_UNLOCKED;
+
+static BleOwner currentBleOwner()
+{
+  portENTER_CRITICAL(&bleOwnerMux);
+  BleOwner owner = bleOwner;
+  portEXIT_CRITICAL(&bleOwnerMux);
+  return owner;
+}
+
+static bool claimBle(BleOwner owner)
+{
+  portENTER_CRITICAL(&bleOwnerMux);
+  bool available = bleOwner == BleOwner::AVAILABLE;
+  if (available)
+    bleOwner = owner;
+  portEXIT_CRITICAL(&bleOwnerMux);
+  return available;
+}
 static bool provEventsRegistered = false;
 static esp_netif_t *provApNetif = NULL;
 static WIFI_PROV_TRANSPORT provTransport = WIFI_PROV_TRANSPORT_SOFTAP;
@@ -271,9 +300,33 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
   }
 }
 
+bool WifiProvBleAvailable()
+{
+#ifdef WIFI_PROV_BLE_AVAILABLE
+  return currentBleOwner() == BleOwner::AVAILABLE;
+#else
+  return false;
+#endif
+}
+
+bool WifiProvBleUsedThisBoot()
+{
+  return currentBleOwner() == BleOwner::WIFI_PROVISIONING;
+}
+
+bool WifiProvClaimBleForMatter()
+{
+  return claimBle(BleOwner::MATTER);
+}
+
 bool WifiProvActive()
 {
   return provActive;
+}
+
+bool WifiProvBleActive()
+{
+  return provActive && provTransport == WIFI_PROV_TRANSPORT_BLE;
 }
 
 const char *WifiProvStatusText()
@@ -330,6 +383,22 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
     return false;
   }
 
+#ifdef WIFI_PROV_BLE_AVAILABLE
+  if (transport == WIFI_PROV_TRANSPORT_BLE && !claimBle(BleOwner::WIFI_PROVISIONING))
+  {
+    if (!WifiProvBleUsedThisBoot())
+    {
+      ESP_LOGW(TAG, "BLE claimed by Matter for this boot; use SoftAP");
+      provSetStatus("BLE claimed by Matter; use SoftAP");
+    }
+    else
+    {
+      ESP_LOGW(TAG, "BLE provisioning already used this boot; restart to use BLE again");
+      provSetStatus("Restart to use BLE again");
+    }
+    return false;
+  }
+#endif
 
   provLogHeap("before provisioning");
 
@@ -346,6 +415,14 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
     provActive = false;
     return false;
   }
+
+#ifndef WIFI_PROV_BLE_AVAILABLE
+  if (transport == WIFI_PROV_TRANSPORT_BLE)
+  {
+    ESP_LOGW(TAG, "BLE not enabled in sdkconfig; using SoftAP");
+    transport = WIFI_PROV_TRANSPORT_SOFTAP;
+  }
+#endif
 
   if (!provEventsRegistered)
   {
@@ -378,6 +455,16 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
   }
 
   wifi_prov_mgr_config_t config = {};
+#ifdef WIFI_PROV_BLE_AVAILABLE
+  if (transport == WIFI_PROV_TRANSPORT_BLE)
+  {
+    config.scheme = wifi_prov_scheme_ble;
+    // Both provisioning profiles stop the host and permanently reclaim its
+    // Bluetooth memory. Another BLE user requires a reboot after this session.
+    config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
+  }
+  else
+#endif
   {
     config.scheme = wifi_prov_scheme_softap;
     config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
@@ -423,6 +510,14 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
   const void *securityParams = provSecret;
 #endif
 
+#ifdef WIFI_PROV_BLE_AVAILABLE
+  if (transport == WIFI_PROV_TRANSPORT_BLE)
+  {
+    static uint8_t uuid[16] = {0xb4, 0xdf, 0x5a, 0x1c, 0x3f, 0x6b, 0xf4, 0xbf,
+                               0xea, 0x4a, 0x82, 0x03, 0x04, 0x90, 0x1a, 0x02};
+    wifi_prov_scheme_ble_set_service_uuid(uuid);
+  }
+#endif
 
   const char *serviceKey = (transport == WIFI_PROV_TRANSPORT_SOFTAP) ? provSoftApKey : NULL;
   if (transport == WIFI_PROV_TRANSPORT_SOFTAP)
@@ -443,7 +538,7 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
   }
 
   // Payload understood by the Espressif provisioning apps
-  const char *transportName = "softap";
+  const char *transportName = (transport == WIFI_PROV_TRANSPORT_BLE) ? "ble" : "softap";
   int n = snprintf(provQr, sizeof(provQr),
                    "{\"ver\":\"v1\",\"name\":\"%s\",\"username\":\"%s\",\"pop\":\"%s\",\"transport\":\"%s\"",
                    provServiceName, PROV_USERNAME, provSecret, transportName);
@@ -466,7 +561,7 @@ bool WifiProvStart(WIFI_PROV_TRANSPORT transport)
     esp_timer_start_once(provTimer, PROV_TIMEOUT_US);
 
   ESP_LOGI(TAG, "Provisioning via %s: service \"%s\"",
-           "SoftAP", provServiceName);
+           transport == WIFI_PROV_TRANSPORT_BLE ? "BLE" : "SoftAP", provServiceName);
   return true;
 }
 
