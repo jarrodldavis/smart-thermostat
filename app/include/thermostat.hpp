@@ -201,6 +201,29 @@ void sdcard_check_and_save_coredump(const char* sd_file_path);
 
 #ifdef MATTER_ENABLED
 bool MatterInit();
+enum class MATTER_PAIRING_TRANSPORT : uint8_t { NETWORK, BLE };
+struct MATTER_PAIRING_STATE
+{
+    bool started;
+    bool paired;
+    bool windowOpen;
+    bool sessionActive;
+    bool wifiConnected;
+    bool bleSupported;
+    bool bleRestartRequired;
+    bool showCode;
+    MATTER_PAIRING_TRANSPORT transport;
+    char status[128];
+    char qr[128];
+    char manual[32];
+};
+void MatterOpenCommissioningWindow(MATTER_PAIRING_TRANSPORT transport);
+void MatterCloseCommissioningWindow();
+void MatterGetPairingState(MATTER_PAIRING_STATE *state);
+void UiMatterShowCommissioning();
+void UiMatterRequestShow();
+void UiMatterShowIfRequested();
+bool MatterPairingActive();
 void MatterFactoryReset();
 void WifiSwitchMatterMode();
 void WifiMatterStarted();

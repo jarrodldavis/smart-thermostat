@@ -440,8 +440,8 @@ void WifiSetCredentials(const char *ssid, const char *pass)
   // Set the wifi parameters
   wifi_config_t wifi_config;
   bzero(&wifi_config, sizeof(wifi_config_t));
-  strcpy((char *)wifi_config.sta.ssid, ssid);
-  strcpy((char *)wifi_config.sta.password, pass);
+  memcpy(wifi_config.sta.ssid, ssid, strnlen(ssid, sizeof(wifi_config.sta.ssid)));
+  memcpy(wifi_config.sta.password, pass, strnlen(pass, sizeof(wifi_config.sta.password)));
   if (!wasInitialized)
   {
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
@@ -523,10 +523,17 @@ void WifiSwitchMatterMode()
 {
   if (OperatingParameters.MatterEnabled)
   {
-    // Leave the station available for first-time provisioning. MatterInit()
-    // follows the same policy when booting without stored credentials.
-    if (strlen(WifiCreds.ssid) == 0)
+    if (!CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE && strlen(WifiCreds.ssid) == 0)
       return;
+
+    if (CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE && WifiProvBleUsedThisBoot())
+    {
+      // BLE provisioning released memory needed by the SDK's startup. The
+      // settings caller already persisted MatterEnabled; reboot without reset.
+      ESP_LOGI(TAG, "Restarting to enable Matter after Wi-Fi BLE memory release");
+      esp_restart();
+      return;
+    }
 
     // Setting MatterStarted keeps networkReconnect task from running
     OperatingParameters.MatterStarted = true;
@@ -540,6 +547,11 @@ void WifiSwitchMatterMode()
     WifiDeinit();
     ESP_LOGI(TAG, "Starting Matter API");
     OperatingParameters.MatterStarted = MatterInit();
+    if (OperatingParameters.MatterStarted && strlen(WifiCreds.ssid) == 0)
+    {
+      MatterOpenCommissioningWindow(MATTER_PAIRING_TRANSPORT::BLE);
+      UiMatterRequestShow();
+    }
     // Serial.printf ("Connecting to wifi\n");
     // OperatingParameters.wifiConnected =
     //   WifiStart(WifiCreds.hostname, WifiCreds.ssid, WifiCreds.password);
@@ -592,8 +604,9 @@ bool WifiStart(const char *hostname, const char *ssid, const char *pass)
 #ifdef MATTER_ENABLED
   if (OperatingParameters.MatterStarted)
   {
-    ESP_LOGI(TAG, "Matter is already running -- abort WifiStart()");
-    return true;
+    ESP_LOGI(TAG, "Matter owns Wi-Fi; adopting its connection state");
+    WifiMatterStarted();
+    return WifiConnected();
   }
 #endif
 
@@ -631,8 +644,8 @@ bool WifiStart(const char *hostname, const char *ssid, const char *pass)
     // Set the wifi parameters
     wifi_config_t wifi_config;
     bzero(&wifi_config, sizeof(wifi_config_t));
-    strcpy((char *)wifi_config.sta.ssid, ssid);
-    strcpy((char *)wifi_config.sta.password, pass);
+    memcpy(wifi_config.sta.ssid, ssid, strnlen(ssid, sizeof(wifi_config.sta.ssid)));
+    memcpy(wifi_config.sta.password, pass, strnlen(pass, sizeof(wifi_config.sta.password)));
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = false;
@@ -727,10 +740,36 @@ bool WifiRestartPending()
   return WifiStatus.reconnect_requested;
 }
 
-// Called when provisioning has connected the station successfully. The existing
-// connection is kept; this only brings the module state in line with it.
+// Keep the station connection established by provisioning, handing ownership
+// to Matter when enabled or updating the legacy Wi-Fi state otherwise.
 void WifiProvisioned()
 {
+#ifdef MATTER_ENABLED
+  if (OperatingParameters.MatterEnabled)
+  {
+    // The manager has already established this station connection. Adopt it
+    // before starting Matter, which can reuse the initialized driver/netif.
+    WifiMatterStarted();
+    if (!OperatingParameters.MatterStarted)
+    {
+      // Matter must own reconnects once it starts. Do not register the legacy
+      // callbacks below, or leave any previously registered ones active.
+      WifiDeregisterEventCallbacks();
+      // Geo-IP timezone discovery opens a TLS connection. Finish it while
+      // provisioning has released its heap and before Matter reserves RAM.
+      initTimeSntp();
+      ESP_LOGI(TAG, "Starting Matter after Wi-Fi provisioning");
+      OperatingParameters.MatterStarted = MatterInit();
+      if (OperatingParameters.MatterStarted)
+      {
+        updateTimeSntp();
+      }
+    }
+    if (OperatingParameters.MatterStarted)
+      return;
+    ESP_LOGE(TAG, "Matter startup after provisioning failed; retaining legacy Wi-Fi");
+  }
+#endif
   if (s_wifi_event_group == NULL)
     WifiRegisterEventCallbacks();
 

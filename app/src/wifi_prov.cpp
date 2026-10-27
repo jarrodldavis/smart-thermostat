@@ -205,9 +205,21 @@ static void provFinishTask(void *arg)
     memset(&previousStaConfig, 0, sizeof(previousStaConfig));
     previousStaConfigValid = false;
     // The station is already connected; keep that connection
+#ifdef MATTER_ENABLED
+    const bool matterWasStarted = OperatingParameters.MatterStarted;
+#endif
     WifiProvisioned();
     provActive = false;
     UiProvRequestDismiss();
+#ifdef MATTER_ENABLED
+    // The CHIP task rejects commissioning while provisioning is active.
+    // Publish completion before scheduling the first network pairing window.
+    if (!matterWasStarted && OperatingParameters.MatterStarted)
+    {
+      MatterOpenCommissioningWindow(MATTER_PAIRING_TRANSPORT::NETWORK);
+      UiMatterRequestShow();
+    }
+#endif
   }
   else
   {
@@ -279,11 +291,18 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
     break;
 
   case WIFI_PROV_END:
+  {
     ESP_LOGI(TAG, "Provisioning ended");
     // The manager must be deinitialised here (as ESP-IDF documents); the rest
     // of the cleanup is deferred to a task
     wifi_prov_mgr_deinit();
-    if (xTaskCreate(provFinishTask, "prov_finish", 6144, NULL, 5, NULL) != pdPASS)
+    uint32_t finishStackSize = 6144;
+#ifdef MATTER_ENABLED
+    // First-time provisioning also initializes Matter from this worker.
+    if (provCredsPending && OperatingParameters.MatterEnabled && !OperatingParameters.MatterStarted)
+      finishStackSize = 8192;
+#endif
+    if (xTaskCreate(provFinishTask, "prov_finish", finishStackSize, NULL, 5, NULL) != pdPASS)
     {
       // Out of memory: release the wifi module so nothing stays gated on
       // provisioning. The event handlers stay registered and are reused by
@@ -294,6 +313,7 @@ static void provEventHandler(void *arg, esp_event_base_t base, int32_t id, void 
       provEndWithoutCreds();
     }
     break;
+  }
 
   default:
     break;
