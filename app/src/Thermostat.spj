@@ -7204,6 +7204,12 @@
             "InheritedType": 11
           },
           {
+            "nid": -277980263,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
+          },
+          {
             "disabled": false,
             "nid": 344595946,
             "strtype": "_event/EventHandler",
@@ -11636,6 +11642,12 @@
             "strtype": "SCREEN/Style_scrollbar",
             "strval": "lv.PART.SCROLLBAR, Rectangle, Pad",
             "InheritedType": 11
+          },
+          {
+            "nid": 405554035,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
           },
           {
             "disabled": false,
@@ -17930,6 +17942,12 @@
             "InheritedType": 11
           },
           {
+            "nid": -770066601,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
+          },
+          {
             "disabled": false,
             "nid": 795852977,
             "strtype": "_event/EventHandler",
@@ -23509,6 +23527,12 @@
             "InheritedType": 11
           },
           {
+            "nid": -1561421345,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
+          },
+          {
             "disabled": false,
             "nid": 588271532,
             "strtype": "_event/EventHandler",
@@ -27671,6 +27695,12 @@
             "strtype": "SCREEN/Style_scrollbar",
             "strval": "lv.PART.SCROLLBAR, Rectangle, Pad",
             "InheritedType": 11
+          },
+          {
+            "nid": 1893178889,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
           }
         ],
         "saved_objtypeKey": "SCREEN",
@@ -29227,6 +29257,12 @@
             "InheritedType": 11
           },
           {
+            "nid": 693980665,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
+          },
+          {
             "disabled": false,
             "nid": 1696577063,
             "strtype": "_event/EventHandler",
@@ -30170,6 +30206,12 @@
             "InheritedType": 11
           },
           {
+            "nid": 2005637586,
+            "strtype": "SCREEN/Don’t export screen",
+            "strval": "False",
+            "InheritedType": 2
+          },
+          {
             "disabled": false,
             "nid": -1012565774,
             "strtype": "_event/EventHandler",
@@ -30263,17 +30305,18 @@
     "description": "",
     "board": "ESP WROVER KIT",
     "board_version": "1.0.0",
-    "editor_version": "1.3.1",
+    "editor_version": "1.3.2",
     "image": "",
     "force_export_images": false,
+    "flat_export": false,
     "pointfilter": true,
     "theme_simplified": false,
     "theme_dark": false,
     "theme_color1": 5,
     "theme_color2": 0,
-    "exportFolderPath": "/home/steve/projects/smart-thermostat/app/src/ui",
-    "projectExportFolderPath": "/home/steve/projects/smart-thermostat/app/src",
-    "backup_cnt": 26,
+    "exportFolderPath": "/Users/jarrodldavis/git/github.com/jarrodldavis/smart-thermostat/app/src/ui",
+    "projectExportFolderPath": "/Users/jarrodldavis/git/github.com/jarrodldavis/smart-thermostat/app/src",
+    "backup_cnt": 27,
     "autosave_cnt": 0,
     "lvgl_version": "8.3.6",
     "callfuncsexport": "CPP_FILE",
