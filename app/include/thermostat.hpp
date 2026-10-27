@@ -116,7 +116,7 @@ typedef struct
 {
     // char hostname[24];   ...replaced by OperatingParameters.DeviceName
     char ssid[33];
-    char password[64];
+    char password[65];
 
 } WIFI_CREDS;
 
@@ -237,6 +237,7 @@ bool eepromUpdateArbMode(const char *key, HVAC_MODE mode);
 
 // HTTP Server
 void webStart();
+void *webServerGetHandle();
 
 // Routine to control wifi
 void WifiSetHostname(const char *hostname);
@@ -244,6 +245,9 @@ void WifiSetCredentials(const char *ssid, const char *pass);
 bool WifiStart(const char *hostname, const char *ssid, const char *pass);
 bool WifiStarted();
 bool WifiRestartPending();
+void WifiProvisioned();
+void WifiProvAborted();
+void UiProvShowIfRequested();
 bool WifiConnected();
 void WifiDisconnect();
 void startReconnectTask();
@@ -251,6 +255,22 @@ uint16_t WifiSignal();
 char *WifiAddress();
 char *Get_WiFiSSID_DD_List( void );
 void WiFi_ScanSSID( void );
+
+// Wi-Fi provisioning (wifi_prov.cpp)
+typedef enum
+{
+    WIFI_PROV_TRANSPORT_SOFTAP
+} WIFI_PROV_TRANSPORT;
+bool WifiProvStart(WIFI_PROV_TRANSPORT transport);
+void WifiProvStop();
+bool WifiProvActive();
+const char *WifiProvStatusText();
+const char *WifiProvServiceName();
+const char *WifiProvQrPayload();
+const char *WifiProvCredentialsText();
+void UiProvInit();
+void UiProvRequestShow();
+void UiProvRequestDismiss();
 
 // TFT
 void tftInit();

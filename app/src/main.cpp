@@ -102,9 +102,19 @@ void app_main()
   indicatorsInit();
   initRelays();
 
-  // Start web server
+  // Start the web server before provisioning so SoftAP can share its HTTP handle.
   ESP_LOGI (TAG, "Starting web server");
   webStart();
+
+  // With no stored credentials, offer Wi-Fi provisioning over SoftAP
+  if (strlen(WifiCreds.ssid) == 0)
+  {
+    ESP_LOGI (TAG, "No wifi credentials stored; starting provisioning");
+    bool provStarted = WifiProvStart(WIFI_PROV_TRANSPORT_SOFTAP);
+    // Show the QR code on the touchscreen
+    if (provStarted)
+      UiProvRequestShow();
+  }
 
 #ifdef TELNET_ENABLED
   // Start telnet server

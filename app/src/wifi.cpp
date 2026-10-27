@@ -33,6 +33,9 @@
 #include "esp_wps.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
+#ifdef MATTER_ENABLED
+#include <platform/CHIPDeviceLayer.h>
+#endif
 
 //@@@ forward declaration for event_handler()
 void WifiRegisterEventCallbacks();
@@ -284,6 +287,13 @@ void WiFi_SsidScanNew(void)
  */
 void WiFi_ScanSSID(void)
 {
+  // The scan restarts the wifi stack, which would break an active provisioning session
+  if (WifiProvActive())
+  {
+    ESP_LOGW(TAG, "Provisioning active - scan skipped");
+    return;
+  }
+
   wifiScanActive = true;
 
   // if (OperatingParameters.wifiConnected)
@@ -311,6 +321,17 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 #ifndef TELNET_ENABLED
   ESP_LOGI(TAG, "event_handler()");
 #endif
+
+  // While provisioning, the provisioning manager owns the connect/disconnect logic
+  if (WifiProvActive() && event_base == WIFI_EVENT)
+  {
+    if (event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+      WifiStatus.Connected = false;
+      OperatingParameters.wifiConnected = false;
+    }
+    return;
+  }
 
   if (wifiScanActive)
   {
@@ -694,6 +715,68 @@ bool WifiStarted()
 bool WifiRestartPending()
 {
   return WifiStatus.reconnect_requested;
+}
+
+// Called when provisioning has connected the station successfully. The existing
+// connection is kept; this only brings the module state in line with it.
+void WifiProvisioned()
+{
+  if (s_wifi_event_group == NULL)
+    WifiRegisterEventCallbacks();
+
+  esp_netif_ip_info_t ipInfo;
+  if (esp_netif_get_ip_info(esp_netif_interface_sta, &ipInfo) == ESP_OK)
+    WifiStatus.ip = ipInfo.ip;
+
+  WifiStatus.wifi_started = true;
+  WifiStatus.Connected = true;
+  WifiStatus.reconnect_requested = false;
+  OperatingParameters.wifiConnected = true;
+  wifiConnecting = false;
+  initTimeSntp();
+}
+
+// Called when provisioning ended without new credentials. Provisioning
+// disconnected the station, so ask the state machine to reconnect.
+void WifiProvAborted()
+{
+#ifdef MATTER_ENABLED
+  if (OperatingParameters.MatterStarted)
+  {
+    // Matter owns this driver. Re-evaluate its restored station configuration
+    // on the CHIP event loop; the legacy reconnect path is disabled in this mode.
+    CHIP_ERROR err = chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
+      CHIP_ERROR recoveryErr = chip::DeviceLayer::ConnectivityMgr().SetWiFiStationMode(
+          chip::DeviceLayer::ConnectivityManager::kWiFiStationMode_Enabled);
+      if (recoveryErr != CHIP_NO_ERROR)
+        ESP_LOGE(TAG, "Failed to resume Matter Wi-Fi: %s", recoveryErr.AsString());
+    });
+    if (err != CHIP_NO_ERROR)
+      ESP_LOGE(TAG, "Failed to schedule Matter Wi-Fi recovery: %s", err.AsString());
+    return;
+  }
+#endif
+  if (strlen(WifiCreds.ssid) > 0)
+  {
+    // Provisioning kept the driver/netif alive and restored its station config.
+    // Reconnect in place: a full WifiReconnect task tears down that driver and
+    // waits for IP, which races with immediately opening another session.
+    WifiStatus.Connected = false;
+    OperatingParameters.wifiConnected = false;
+    lastWifiReconnect = millis();
+    esp_err_t err = esp_wifi_connect();
+    if (err == ESP_OK)
+    {
+      WifiStatus.reconnect_requested = false;
+      ESP_LOGI(TAG, "Resuming restored Wi-Fi connection after provisioning");
+    }
+    else
+    {
+      ESP_LOGW(TAG, "Could not resume restored Wi-Fi: %s", esp_err_to_name(err));
+      WifiStatus.reconnect_requested = true;
+      lastWifiReconnect = 0;
+    }
+  }
 }
 
 bool WifiConnected()
