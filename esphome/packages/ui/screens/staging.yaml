@@ -1,0 +1,20 @@
+lvgl:
+  pages:
+  - !include
+    file: ../number.yaml
+    vars:
+      kind: DIFFERENCE
+      f_step: 0.1
+      entity: stage_delta
+      title: Supplemental threshold
+      previous: stage_delay_page
+      next: stage_delay_page
+  - !include
+    file: ../number.yaml
+    vars:
+      kind: NONE
+      f_step: 1.0
+      entity: stage_delay
+      title: Supplemental interval
+      previous: stage_delta_page
+      next: stage_delta_page

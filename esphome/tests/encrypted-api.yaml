@@ -1,0 +1,11 @@
+# Non-production test values; never flash this fixture to installed equipment.
+packages:
+  thermostat: !include ../smart-thermostat.yaml
+api:
+  encryption:
+    key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+wifi:
+  ssid: example-test-network
+  password: example-test-password
+esphome:
+  name_add_mac_suffix: false

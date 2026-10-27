@@ -1,0 +1,448 @@
+# Native grid layouts and button matrices; all interaction uses taps.
+# Settings includes bind directly to entity IDs at configuration time.
+packages:
+  main_screens:
+    lvgl:
+      pages:
+      - !include ui/screens/main_page.yaml
+      - !include ui/screens/mode_page.yaml
+      - !include ui/screens/settings_menu.yaml
+  equipment_settings: !include ui/screens/equipment.yaml
+  backup_settings: !include ui/screens/backup.yaml
+  staging_settings: !include ui/screens/staging.yaml
+  display_settings: !include ui/screens/display.yaml
+  calibration_settings: !include ui/screens/calibration.yaml
+  utility_screens:
+    lvgl:
+      pages:
+      - !include ui/screens/diagnostics_page.yaml
+      - !include ui/screens/wifi_setup_page.yaml
+
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+      # Credentials are stable for this boot; generate once, before opening setup.
+      - lvgl.qrcode.update:
+          id: wifi_setup_qr
+          text: !lambda |-
+            // Generated SSID/password contain only QR-safe letters, digits and hyphens.
+            return str_sprintf("WIFI:T:WPA;S:%s;P:%s;;",
+              id(setup_credentials).ssid(), id(setup_credentials).password());
+      - script.execute: wake_screen
+      - script.execute: refresh_ui
+  includes:
+  - <ui_temperature.h>
+  - ../include/ui_temperature.h
+lvgl:
+  id: thermostat_ui
+  displays:
+  - panel
+  rotation: 90
+  touchscreens:
+  - touchscreen_id: panel_touch
+    id: panel_touch_listener
+  buffer_size: 10%
+  color_depth: 16
+  default_font: montserrat_14
+  resume_on_input: true
+  on_pause:
+    - light.turn_off: screen_backlight
+  on_resume:
+    - script.execute: update_backlight
+  style_definitions:
+  - id: screen
+    pad_all: 8
+    bg_color: 1319218
+    text_color: 16777215
+  - id: large_text
+    text_font: montserrat_20
+  - id: centered_text
+    text_align: center
+  theme:
+    dark_mode: true
+    button:
+      height: 40
+      bg_color: 2506069
+      text_color: 16777215
+    buttonmatrix:
+      bg_opa: TRANSP
+      border_width: 0
+      pad_all: 0
+      pad_row: 6
+      pad_column: 6
+      items:
+        bg_color: 2506069
+        text_color: 16777215
+        radius: 5
+        checked:
+          bg_color: 1668818
+        disabled:
+          bg_color: 3159098
+          text_color: 8947848
+
+script:
+- id: wake_screen
+  then:
+  # Native resume resets LVGL's inactivity counter and redraws the screen.
+  - lvgl.resume: null
+- id: update_backlight
+  then:
+  - if:
+      condition:
+        not:
+          lvgl.is_paused:
+            lvgl_id: thermostat_ui
+      then:
+      - light.turn_on:
+          id: screen_backlight
+          brightness: !lambda |-
+            if (!id(auto_brightness).state) return 0.7f;
+            float level = id(ambient_light).state / 3.3f;
+            return std::isfinite(level) ? std::max(0.2f, std::min(1.0f, level)) : 0.7f;
+- id: adjust_target
+  parameters:
+    heating: bool
+    delta: float
+  then:
+  - if:
+      condition:
+        lambda: return heating;
+      then:
+      - climate.control:
+          id: hvac_climate
+          target_temperature_low: !lambda |-
+            const bool f = id(display_units).current_option() == "Fahrenheit";
+            return smeisner::adjust_display(id(hvac_climate).target_temperature_low, delta > 0 ? 1 : -1, f,
+              smeisner::TemperatureKind::ABSOLUTE, 0.5f, 1.0f, 7.0f, id(hvac_climate).target_temperature_high - 2.0f);
+      else:
+      - climate.control:
+          id: hvac_climate
+          target_temperature_high: !lambda |-
+            const bool f = id(display_units).current_option() == "Fahrenheit";
+            return smeisner::adjust_display(id(hvac_climate).target_temperature_high, delta > 0 ? 1 : -1, f,
+              smeisner::TemperatureKind::ABSOLUTE, 0.5f, 1.0f, id(hvac_climate).target_temperature_low + 2.0f, 35.0f);
+- id: ui_beep
+  mode: restart
+  then:
+  - if:
+      condition:
+        switch.is_on: beep_enabled
+      then:
+      - output.set_level:
+          id: buzzer_pwm
+          level: 30%
+      - delay: 50ms
+      - output.turn_off: buzzer_pwm
+- id: refresh_ui
+  then:
+  - lvgl.label.update:
+      id: current_label
+      text: !lambda |-
+        float t = id(room_temperature).state;
+        if (!std::isfinite(t)) return std::string("Waiting for sensor");
+        bool f = id(display_units).current_option().str() == "Fahrenheit";
+        const float h = id(room_humidity).state;
+        const auto humidity = std::isfinite(h) ? str_sprintf("%.0f%%", h) : std::string("--%");
+        return str_sprintf("%.1f %s  %s", f ? celsius_to_fahrenheit(t) : t,
+          f ? "F" : "C", humidity.c_str());
+  - lvgl.label.update:
+      id: status_label
+      text: !lambda |-
+        if (id(updating)) return std::string("Update shutdown; restart to resume");
+        if (!id(commissioned)) return std::string("Equipment setup required");
+        if (id(temperature_fault).state) return std::string("Temperature sensor fault");
+        return str_sprintf("%s | Stage %d", id(heat_source).state.c_str(), (id(relay_y2).state ? 2 : id(relay_y1).state ? 1 : 0));
+  - lvgl.label.update:
+      id: heat_target_label
+      text: !lambda |-
+        const float c = id(hvac_climate).target_temperature_low;
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        return f ? str_sprintf("Heat %.0f F", smeisner::to_display(c, true, smeisner::TemperatureKind::ABSOLUTE)) :
+                   str_sprintf("Heat %.1f C", c);
+  - lvgl.label.update:
+      id: cool_target_label
+      text: !lambda |-
+        const float c = id(hvac_climate).target_temperature_high;
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        return f ? str_sprintf("Cool %.0f F", smeisner::to_display(c, true, smeisner::TemperatureKind::ABSOLUTE)) :
+                   str_sprintf("Cool %.1f C", c);
+  - lvgl.label.update:
+      id: diagnostics_label
+      text: !lambda |-
+        return str_sprintf("IP: %s\nWi-Fi: %s | HA: %s\nCommissioned: %s\nTemperature: %s\nOutdoor fallback: %s\nSource: %s\nCompressor stage: %d",
+          id(device_ip).state.c_str(), wifi::global_wifi_component->is_connected() ? "online" : "offline",
+          api::global_api_server->is_connected() ? "connected" : "offline",
+          id(commissioned) ? "yes" : "no", id(temperature_fault).state ? "FAULT" : "OK",
+          id(outdoor_policy_fallback).state ? "yes" : "no", id(heat_source).state.c_str(), (id(relay_y2).state ? 2 : id(relay_y1).state ? 1 : 0));
+  - lvgl.label.update:
+      id: mode_label
+      text: !lambda |-
+        switch (id(hvac_climate).mode) {
+         case climate::CLIMATE_MODE_HEAT: return std::string("Mode: Heat");
+         case climate::CLIMATE_MODE_COOL: return std::string("Mode: Cool");
+         case climate::CLIMATE_MODE_HEAT_COOL: return std::string("Mode: Heat/Cool");
+         case climate::CLIMATE_MODE_FAN_ONLY: return std::string("Mode: Fan only");
+         default: return std::string("Mode: Off");
+        }
+  - lvgl.label.update:
+      id: commission_label
+      text: !lambda |-
+        return std::string(id(commissioned) ? "Equipment setup confirmed" : "Confirm setup after equipment changes");
+  - lvgl.label.update:
+      id: wifi_setup_status
+      text: !lambda |-
+        return std::string(id(setup_credentials).is_active() ? "Wi-Fi setup (active)" : "Wi-Fi setup (inactive)");
+  - lvgl.label.update:
+      id: wifi_setup_ssid
+      text: !lambda |-
+        return std::string(id(setup_credentials).ssid());
+  - lvgl.label.update:
+      id: wifi_password_label
+      text: !lambda |-
+        const char *password = id(setup_credentials).password();
+        return str_sprintf("%.10s\n%s", password, password + 10);
+  - lvgl.widget.update:
+      id: equipment_option_0
+      state:
+        checked: !lambda |-
+          return id(equipment).current_option() == "Conventional";
+  - lvgl.widget.update:
+      id: equipment_option_1
+      state:
+        checked: !lambda |-
+          return id(equipment).current_option() == "Heat pump";
+  - lvgl.widget.update:
+      id: compressor_stages_option_0
+      state:
+        checked: !lambda |-
+          return id(compressor_stages).current_option() == "1";
+  - lvgl.widget.update:
+      id: compressor_stages_option_1
+      state:
+        checked: !lambda |-
+          return id(compressor_stages).current_option() == "2";
+  - lvgl.widget.update:
+      id: valve_polarity_option_0
+      state:
+        checked: !lambda |-
+          return id(valve_polarity).current_option() == "Energized in cooling";
+  - lvgl.widget.update:
+      id: valve_polarity_option_1
+      state:
+        checked: !lambda |-
+          return id(valve_polarity).current_option() == "Energized in heating";
+  - lvgl.widget.update:
+      id: heating_fan_option_0
+      state:
+        checked: !lambda |-
+          return id(heating_fan).current_option() == "Equipment controlled";
+  - lvgl.widget.update:
+      id: heating_fan_option_1
+      state:
+        checked: !lambda |-
+          return id(heating_fan).current_option() == "Thermostat controlled";
+  - lvgl.widget.update:
+      id: backup_type_option_0
+      state:
+        checked: !lambda |-
+          return id(backup_type).current_option() == "None";
+  - lvgl.widget.update:
+      id: backup_type_option_1
+      state:
+        checked: !lambda |-
+          return id(backup_type).current_option() == "Electric supplemental";
+  - lvgl.widget.update:
+      id: backup_type_option_2
+      state:
+        checked: !lambda |-
+          return id(backup_type).current_option() == "Furnace replacement";
+  - lvgl.widget.update:
+      id: auto_backup_off
+      state:
+        checked: !lambda |-
+          return !id(auto_backup).state;
+  - lvgl.widget.update:
+      id: auto_backup_on
+      state:
+        checked: !lambda |-
+          return id(auto_backup).state;
+  - lvgl.widget.update:
+      id: backup_policy_option_0
+      state:
+        checked: !lambda |-
+          return id(backup_policy).current_option() == "Local demand";
+  - lvgl.widget.update:
+      id: backup_policy_option_1
+      state:
+        checked: !lambda |-
+          return id(backup_policy).current_option() == "Outdoor temperature";
+  - lvgl.widget.update:
+      id: backup_policy_option_2
+      state:
+        checked: !lambda |-
+          return id(backup_policy).current_option() == "Either";
+  - lvgl.label.update:
+      id: balance_point_value
+      text: !lambda |-
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        const auto kind = smeisner::TemperatureKind::ABSOLUTE;
+        const float value = smeisner::to_display(id(balance_point).state, f, kind);
+        return str_sprintf("%.1f %s", value, f ? "F" : "C");
+  - lvgl.widget.update:
+      id: balance_confirmed_off
+      state:
+        checked: !lambda |-
+          return !id(balance_confirmed).state;
+  - lvgl.widget.update:
+      id: balance_confirmed_on
+      state:
+        checked: !lambda |-
+          return id(balance_confirmed).state;
+  - lvgl.widget.update:
+      id: outdoor_units_option_0
+      state:
+        checked: !lambda |-
+          return id(outdoor_units).current_option() == "Celsius";
+  - lvgl.widget.update:
+      id: outdoor_units_option_1
+      state:
+        checked: !lambda |-
+          return id(outdoor_units).current_option() == "Fahrenheit";
+  - lvgl.widget.update:
+      id: emergency_heat_off
+      state:
+        checked: !lambda |-
+          return !id(emergency_heat).state;
+  - lvgl.widget.update:
+      id: emergency_heat_on
+      state:
+        checked: !lambda |-
+          return id(emergency_heat).state;
+        disabled: !lambda |-
+          return id(equipment).current_option() != "Heat pump" || id(backup_type).current_option() == "None";
+  - lvgl.label.update:
+      id: valve_pre_change_delay_value
+      text: !lambda return str_sprintf("%.0f s", id(valve_pre_change_delay).state);
+  - lvgl.label.update:
+      id: valve_post_change_delay_value
+      text: !lambda return str_sprintf("%.0f s", id(valve_post_change_delay).state);
+  - lvgl.widget.update:
+      id: retain_valve_on_stop_off
+      state:
+        checked: !lambda return !id(retain_valve_on_stop).state;
+  - lvgl.widget.update:
+      id: retain_valve_on_stop_on
+      state:
+        checked: !lambda return id(retain_valve_on_stop).state;
+  - lvgl.label.update:
+      id: stage_delta_value
+      text: !lambda |-
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        const auto kind = smeisner::TemperatureKind::DIFFERENCE;
+        const float value = smeisner::to_display(id(stage_delta).state, f, kind);
+        return str_sprintf("%.1f %s", value, f ? "F" : "C");
+  - lvgl.label.update:
+      id: stage_delay_value
+      text: !lambda |-
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        const auto kind = smeisner::TemperatureKind::NONE;
+        const float value = smeisner::to_display(id(stage_delay).state, f, kind);
+        return str_sprintf("%.1f %s", value, "min");
+  - lvgl.label.update:
+      id: sleep_seconds_value
+      text: !lambda |-
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        const auto kind = smeisner::TemperatureKind::NONE;
+        const float value = smeisner::to_display(id(sleep_seconds).state, f, kind);
+        return str_sprintf("%.1f %s", value, "s");
+  - lvgl.widget.update:
+      id: auto_brightness_off
+      state:
+        checked: !lambda |-
+          return !id(auto_brightness).state;
+  - lvgl.widget.update:
+      id: auto_brightness_on
+      state:
+        checked: !lambda |-
+          return id(auto_brightness).state;
+  - lvgl.widget.update:
+      id: beep_enabled_off
+      state:
+        checked: !lambda |-
+          return !id(beep_enabled).state;
+  - lvgl.widget.update:
+      id: beep_enabled_on
+      state:
+        checked: !lambda |-
+          return id(beep_enabled).state;
+  - lvgl.label.update:
+      id: temperature_offset_value
+      text: !lambda |-
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        const auto kind = smeisner::TemperatureKind::DIFFERENCE;
+        const float value = smeisner::to_display(id(temperature_offset).state, f, kind);
+        return str_sprintf("%.1f %s", value, f ? "F" : "C");
+  - lvgl.label.update:
+      id: humidity_offset_value
+      text: !lambda |-
+        const bool f = id(display_units).current_option() == "Fahrenheit";
+        const auto kind = smeisner::TemperatureKind::NONE;
+        const float value = smeisner::to_display(id(humidity_offset).state, f, kind);
+        return str_sprintf("%.1f %s", value, "%");
+  - lvgl.widget.update:
+      id: mode_off
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).mode == climate::CLIMATE_MODE_OFF;
+  - lvgl.widget.update:
+      id: mode_heat
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT;
+  - lvgl.widget.update:
+      id: mode_cool
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).mode == climate::CLIMATE_MODE_COOL;
+  - lvgl.widget.update:
+      id: mode_heat_cool
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT_COOL;
+  - lvgl.widget.update:
+      id: mode_fan_only
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).mode == climate::CLIMATE_MODE_FAN_ONLY;
+  - lvgl.widget.update:
+      id: fan_auto
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).fan_mode == climate::CLIMATE_FAN_AUTO;
+  - lvgl.widget.update:
+      id: fan_on
+      state:
+        checked: !lambda |-
+          return id(hvac_climate).fan_mode == climate::CLIMATE_FAN_ON;
+interval:
+- interval: 1s
+  then:
+  # Recheck while presence holds the screen awake, so clearing presence can
+  # still permit sleep even if the idle timeout was crossed earlier.
+  - if:
+      condition:
+        and:
+        - lvgl.is_idle:
+            lvgl_id: thermostat_ui
+            timeout: !lambda return uint32_t(id(sleep_seconds).state * 1000);
+        - not:
+            lvgl.is_paused:
+              lvgl_id: thermostat_ui
+        - binary_sensor.is_off: presence_pin
+        - binary_sensor.is_off: radar_presence
+      then:
+      - lvgl.pause:
+          show_snow: false
+  - script.execute: update_backlight
+  - script.execute: refresh_ui

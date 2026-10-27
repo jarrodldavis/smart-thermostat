@@ -1,0 +1,40 @@
+id: diagnostics_page
+styles: screen
+scrollable: false
+layout:
+  type: GRID
+  grid_rows:
+  - 40
+  - FR(1)
+  grid_columns:
+  - FR(1)
+  grid_cell_x_align: STRETCH
+  grid_cell_y_align: STRETCH
+  pad_row: 6
+  pad_column: 6
+widgets:
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: Back
+        control:
+          no_repeat: true
+        on_click:
+        - lvgl.page.show: main_page
+        - script.execute: ui_beep
+      - text: Wi-Fi setup
+        control:
+          no_repeat: true
+        on_click:
+        - lvgl.page.show: wifi_setup_page
+        - script.execute: ui_beep
+    grid_cell_row_pos: 0
+    grid_cell_column_pos: 0
+- label:
+    text: Starting
+    long_mode: wrap
+    id: diagnostics_label
+    grid_cell_row_pos: 1
+    grid_cell_column_pos: 0
+    grid_cell_y_align: CENTER

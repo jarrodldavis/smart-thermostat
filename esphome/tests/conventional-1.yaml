@@ -1,0 +1,7 @@
+# CI profile: runtime defaults only; commissioning remains required.
+substitutions:
+  default_equipment: Conventional
+  default_stages: '1'
+  default_backup: None
+packages:
+  thermostat: !include ../smart-thermostat.yaml

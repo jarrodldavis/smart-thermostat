@@ -1,0 +1,6 @@
+# Merge this fragment into your adopted/local configuration.
+# Replace remote_outdoor with your existing ESPHome sensor ID.
+# The native control-only copy subscribes automatically; no on_value hook needed.
+substitutions:
+  outdoor_sensor_id: remote_outdoor
+# Configure Outdoor sensor units to match that sensor (Celsius or Fahrenheit).

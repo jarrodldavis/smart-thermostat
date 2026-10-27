@@ -1,0 +1,72 @@
+# Shared declarative layout; include vars resolve to explicit IDs and native actions.
+id: ${entity}_page
+styles: screen
+scrollable: false
+layout:
+  type: GRID
+  grid_rows:
+  - 40
+  - 44
+  - FR(1)
+  - 40
+  grid_columns:
+  - FR(1)
+  grid_cell_x_align: STRETCH
+  grid_cell_y_align: STRETCH
+  pad_row: 6
+  pad_column: 6
+widgets:
+- label:
+    text: ${title}
+    long_mode: wrap
+    styles: [large_text, centered_text]
+    grid_cell_row_pos: 0
+    grid_cell_column_pos: 0
+    grid_cell_y_align: CENTER
+- label:
+    text: --
+    long_mode: wrap
+    styles: [large_text, centered_text]
+    id: ${entity}_value
+    grid_cell_row_pos: 1
+    grid_cell_column_pos: 0
+    grid_cell_y_align: CENTER
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: '-'
+        control:
+          no_repeat: true
+        on_click:
+        - number.set:
+            id: ${entity}
+            value: !lambda |-
+              const bool f = id(display_units).current_option() == "Fahrenheit";
+              return smeisner::adjust_display(id(${entity}).state, -1, f,
+                smeisner::TemperatureKind::${kind}, id(${entity}).traits.get_step(), ${f_step},
+                id(${entity}).traits.get_min_value(), id(${entity}).traits.get_max_value());
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+      - text: +
+        control:
+          no_repeat: true
+        on_click:
+        - number.set:
+            id: ${entity}
+            value: !lambda |-
+              const bool f = id(display_units).current_option() == "Fahrenheit";
+              return smeisner::adjust_display(id(${entity}).state, 1, f,
+                smeisner::TemperatureKind::${kind}, id(${entity}).traits.get_step(), ${f_step},
+                id(${entity}).traits.get_min_value(), id(${entity}).traits.get_max_value());
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+    grid_cell_row_pos: 2
+    grid_cell_column_pos: 0
+- !include
+  file: navigation.yaml
+  vars:
+    previous: ${previous}
+    next: ${next}
+    row: 3
+    column: 0

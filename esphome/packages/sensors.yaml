@@ -1,0 +1,123 @@
+debug:
+  update_interval: 30s
+
+sensor:
+  - platform: debug
+    free:
+      name: Free heap
+    loop_time:
+      name: Loop time
+  - platform: aht10
+    variant: AHT20
+    update_interval: 10s
+    temperature:
+      id: room_temperature
+      name: Temperature
+      filters:
+        # Reject invalid raw samples before smoothing so they cannot poison its
+        # history. NaN passes through immediately and inhibits HVAC operation.
+        - lambda: |-
+            return std::isfinite(x) && x >= -40.0f && x <= 85.0f ? x : NAN;
+        - exponential_moving_average:
+            alpha: 0.1
+            send_every: 1
+        - offset: !lambda return id(temperature_offset).state;
+        - timeout: 60s
+    humidity:
+      id: room_humidity
+      name: Humidity
+      filters:
+        - exponential_moving_average:
+            alpha: 0.1
+            send_every: 1
+        - offset: !lambda return id(humidity_offset).state;
+        # Native clamp maps NaN to a bound; keep invalid humidity invalid.
+        - lambda: |-
+            return std::isfinite(x) ? std::clamp(x, 0.0f, 100.0f) : NAN;
+        - timeout: 60s
+  - platform: adc
+    id: ambient_light
+    name: Ambient light voltage
+    pin: GPIO8
+    attenuation: 12db
+    update_interval: 1s
+    filters:
+      - exponential_moving_average:
+          alpha: 0.2
+          send_every: 1
+  - platform: homeassistant
+    id: outdoor_temperature
+    entity_id: ${outdoor_entity}
+    internal: true
+  - platform: copy
+    id: outdoor_control_temperature
+    on_value:
+      - script.execute: apply_hvac
+    source_id: ${outdoor_sensor_id}
+    internal: true
+    filters:
+      # The original sensor remains untouched; this control-only copy expires.
+      - timeout: 15min
+  - platform: uptime
+    name: Uptime
+  - platform: wifi_signal
+    name: Wi-Fi signal
+    update_interval: 60s
+  - platform: template
+    name: Compressor stage
+    id: compressor_stage
+    accuracy_decimals: 0
+    update_interval: 1s
+    lambda: |-
+      return id(relay_y2).state ? 2 : id(relay_y1).state ? 1 : 0;
+
+binary_sensor:
+  - platform: ld2410
+    has_target:
+      name: Radar presence
+      id: radar_presence
+      on_press:
+        - script.execute: wake_screen
+  - platform: gpio
+    id: presence_pin
+    name: Presence
+    pin: GPIO18
+    device_class: occupancy
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 10s
+    on_press:
+      - script.execute: wake_screen
+  - platform: template
+    name: Temperature fault
+    id: temperature_fault
+    device_class: problem
+    lambda: return !std::isfinite(id(room_temperature).state);
+  - platform: template
+    name: Outdoor policy fallback
+    id: outdoor_policy_fallback
+    device_class: problem
+    lambda: |-
+      return id(equipment).current_option() == "Heat pump" && id(auto_backup).state &&
+        id(backup_type).current_option() != "None" && id(backup_policy).current_option() != "Local demand" &&
+        (!id(balance_confirmed).state || !std::isfinite(id(balance_point).state) ||
+         !std::isfinite(id(outdoor_control_temperature).state));
+
+text_sensor:
+  - platform: template
+    name: Active heat source
+    id: heat_source
+    update_interval: 1s
+    lambda: |-
+      if (id(relay_aux).state && id(relay_y1).state) return {"Heat pump + electric backup"};
+      if (id(relay_aux).state) return {"Backup"};
+      if (id(relay_w).state) return {"Furnace"};
+      if (id(relay_y1).state && id(hvac_climate).action == climate::CLIMATE_ACTION_HEATING)
+        return {"Heat pump"};
+      if (id(relay_y1).state) return {"Cooling"};
+      if (id(relay_g).state) return {"Fan"};
+      return {"Idle"};
+  - platform: wifi_info
+    ip_address:
+      id: device_ip
+      name: IP address

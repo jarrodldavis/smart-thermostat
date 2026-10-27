@@ -1,0 +1,73 @@
+id: wifi_setup_page
+styles: screen
+scrollable: false
+layout:
+  type: GRID
+  grid_rows: [24, 150, 40]
+  grid_columns: [150, FR(1)]
+  grid_cell_x_align: STRETCH
+  grid_cell_y_align: STRETCH
+  pad_row: 4
+  pad_column: 6
+widgets:
+- label:
+    text: Wi-Fi setup
+    id: wifi_setup_status
+    styles: large_text
+    grid_cell_row_pos: 0
+    grid_cell_column_pos: 0
+    grid_cell_column_span: 2
+    grid_cell_y_align: CENTER
+# Keep the original 150 px QR canvas with its white scanning margin.
+- qrcode:
+    id: wifi_setup_qr
+    size: 150
+    width: 150
+    height: 150
+    light_color: 0xFFFFFF
+    dark_color: 0x000000
+    border_width: 12
+    border_color: 0xFFFFFF
+    grid_cell_row_pos: 1
+    grid_cell_column_pos: 0
+    grid_cell_x_align: CENTER
+    grid_cell_y_align: CENTER
+# Group labels without introducing a themed panel or resetting inherited text styles.
+- container:
+    scrollable: false
+    grid_cell_row_pos: 1
+    grid_cell_column_pos: 1
+    layout:
+      type: FLEX
+      flex_flow: COLUMN
+      flex_align_main: SPACE_EVENLY
+      flex_align_cross: CENTER
+    widgets:
+    - label:
+        text: Scan to join Wi-Fi
+    - label:
+        text: ''
+        long_mode: wrap
+        width: 100%
+        styles: centered_text
+        id: wifi_setup_ssid
+    - label:
+        text: ''
+        styles: centered_text
+        id: wifi_password_label
+    - label:
+        text: "Then open\n192.168.4.1"
+        styles: centered_text
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: Back
+        control:
+          no_repeat: true
+        on_click:
+        - lvgl.page.show: diagnostics_page
+        - script.execute: ui_beep
+    grid_cell_row_pos: 2
+    grid_cell_column_pos: 0
+    grid_cell_column_span: 2

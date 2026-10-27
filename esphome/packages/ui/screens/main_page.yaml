@@ -1,0 +1,162 @@
+id: main_page
+styles: screen
+scrollable: false
+layout:
+  type: GRID
+  grid_rows:
+  - 28
+  - 24
+  - 40
+  - 40
+  - 40
+  - 40
+  grid_columns:
+  - FR(1)
+  - FR(1)
+  grid_cell_x_align: STRETCH
+  grid_cell_y_align: STRETCH
+  pad_row: 2
+  pad_column: 6
+widgets:
+- label:
+    text: Waiting for sensor
+    long_mode: wrap
+    styles: large_text
+    id: current_label
+    grid_cell_row_pos: 0
+    grid_cell_column_pos: 0
+    grid_cell_column_span: 2
+    grid_cell_y_align: CENTER
+- label:
+    text: Equipment setup required
+    long_mode: wrap
+    id: status_label
+    grid_cell_row_pos: 1
+    grid_cell_column_pos: 0
+    grid_cell_column_span: 2
+    grid_cell_y_align: CENTER
+- button:
+    scrollable: false
+    on_click:
+    - lvgl.page.show: mode_page
+    - script.execute: ui_beep
+    widgets:
+    - label:
+        text: 'Mode: Off'
+        long_mode: wrap
+        align: center
+        id: mode_label
+    grid_cell_row_pos: 2
+    grid_cell_column_pos: 0
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: Fan auto
+        control:
+          no_repeat: true
+          checkable: true
+        on_click:
+        - climate.control:
+            id: hvac_climate
+            fan_mode: AUTO
+        - script.execute: ui_beep
+        id: fan_auto
+      - text: Fan on
+        control:
+          no_repeat: true
+          checkable: true
+        on_click:
+        - climate.control:
+            id: hvac_climate
+            fan_mode: 'ON'
+        - script.execute: ui_beep
+        id: fan_on
+    one_checked: true
+    grid_cell_row_pos: 2
+    grid_cell_column_pos: 1
+- label:
+    text: Heat --
+    long_mode: wrap
+    id: heat_target_label
+    grid_cell_row_pos: 3
+    grid_cell_column_pos: 0
+    grid_cell_y_align: CENTER
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: '-'
+        control:
+          no_repeat: true
+        on_click:
+        - script.execute:
+            id: adjust_target
+            heating: true
+            delta: -0.5
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+      - text: +
+        control:
+          no_repeat: true
+        on_click:
+        - script.execute:
+            id: adjust_target
+            heating: true
+            delta: 0.5
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+    grid_cell_row_pos: 3
+    grid_cell_column_pos: 1
+- label:
+    text: Cool --
+    long_mode: wrap
+    id: cool_target_label
+    grid_cell_row_pos: 4
+    grid_cell_column_pos: 0
+    grid_cell_y_align: CENTER
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: '-'
+        control:
+          no_repeat: true
+        on_click:
+        - script.execute:
+            id: adjust_target
+            heating: false
+            delta: -0.5
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+      - text: +
+        control:
+          no_repeat: true
+        on_click:
+        - script.execute:
+            id: adjust_target
+            heating: false
+            delta: 0.5
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+    grid_cell_row_pos: 4
+    grid_cell_column_pos: 1
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: Settings
+        control:
+          no_repeat: true
+        on_click:
+        - lvgl.page.show: settings_menu
+        - script.execute: ui_beep
+      - text: Diagnostics
+        control:
+          no_repeat: true
+        on_click:
+        - lvgl.page.show: diagnostics_page
+        - script.execute: ui_beep
+    grid_cell_row_pos: 5
+    grid_cell_column_pos: 0
+    grid_cell_column_span: 2

@@ -1,0 +1,61 @@
+# Shared declarative layout; include vars resolve to explicit IDs and native actions.
+id: ${entity}_page
+styles: screen
+scrollable: false
+layout:
+  type: GRID
+  grid_rows:
+  - 40
+  - FR(1)
+  - 40
+  grid_columns:
+  - FR(1)
+  grid_cell_x_align: STRETCH
+  grid_cell_y_align: STRETCH
+  pad_row: 6
+  pad_column: 6
+widgets:
+- label:
+    text: ${title}
+    long_mode: wrap
+    styles: [large_text, centered_text]
+    grid_cell_row_pos: 0
+    grid_cell_column_pos: 0
+    grid_cell_y_align: CENTER
+- buttonmatrix:
+    scrollable: false
+    rows:
+    - buttons:
+      - text: ${option0}
+        control:
+          no_repeat: true
+          checkable: true
+        on_click:
+        - select.set:
+            id: ${entity}
+            option: ${option0}
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+        id: ${entity}_option_0
+    - buttons:
+      - text: ${option1}
+        control:
+          no_repeat: true
+          checkable: true
+        on_click:
+        - select.set:
+            id: ${entity}
+            option: ${option1}
+        - script.execute: refresh_ui
+        - script.execute: ui_beep
+        id: ${entity}_option_1
+    one_checked: true
+    grid_cell_row_pos: 1
+    grid_cell_column_pos: 0
+- !include
+  file: navigation.yaml
+  vars:
+    previous: ${previous}
+    next: ${next}
+    row: 2
+    column: 0

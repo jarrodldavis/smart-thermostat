@@ -1,0 +1,124 @@
+name: ESPHome
+
+on:
+  pull_request:
+    paths: ['esphome/**', '.github/workflows/esphome.yml']
+  push:
+    branches: [main, esphome]
+    paths: ['esphome/**', '.github/workflows/esphome.yml']
+    tags: ['esphome-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: esphome-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ESPHOME_VERSION: 2026.10.0
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install esphome==${{ env.ESPHOME_VERSION }}
+      - name: Test helpers and packaging
+        run: |
+          ESPHOME_INCLUDE=$(python -c 'import pathlib, esphome; print(pathlib.Path(esphome.__file__).parent.parent)')
+          g++ -std=c++20 -Wall -Wextra -Werror -I esphome/tests/host -isystem "$ESPHOME_INCLUDE" esphome/tests/test_helpers.cpp -o /tmp/test-helpers
+          /tmp/test-helpers
+          python -m unittest discover -s esphome/tests -p 'test_*.py' -v
+      - name: Run real native thermostat integration
+        run: |
+          esphome compile esphome/tests/host/thermostat.yaml
+          NATIVE_TEST_PREFS=$(mktemp -d)
+          ESPHOME_PREFDIR="$NATIVE_TEST_PREFS" timeout 120s esphome/tests/host/.esphome/build/native-thermostat-test/.pioenvs/native-thermostat-test/program
+      - name: Validate factory and all equipment profiles
+        run: |
+          esphome config esphome/smart-thermostat.yaml
+          for profile in esphome/tests/*.yaml; do esphome config "$profile"; done
+      - name: Check immutable release metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python esphome/scripts/prepare_release.py "$GITHUB_REF_NAME" --check
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [factory, encrypted-api, custom-outdoor, conventional-1, conventional-2, heat-pump-1-none, heat-pump-2-none, heat-pump-1-electric, heat-pump-2-electric, heat-pump-1-furnace, heat-pump-2-furnace]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install ESPHome for equipment profiles
+        if: matrix.profile != 'factory'
+        run: pip install esphome==${{ env.ESPHOME_VERSION }}
+      - uses: actions/cache@v4
+        if: matrix.profile != 'factory'
+        with:
+          path: ~/.cache/esphome
+          key: esphome-${{ runner.os }}-${{ env.ESPHOME_VERSION }}
+      - name: Compile equipment profile
+        if: matrix.profile != 'factory'
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: esphome compile "esphome/tests/$PROFILE.yaml"
+      - name: Build factory firmware and Web Tools manifest
+        if: matrix.profile == 'factory'
+        id: factory
+        uses: esphome/build-action@82ec6bded4e0998e1cda757680e5f1ac85825cfd # v7.4.0
+        with:
+          yaml-file: esphome/smart-thermostat.yaml
+          version: ${{ env.ESPHOME_VERSION }}
+          complete-manifest: true
+      - name: Prepare installer artifacts
+        if: matrix.profile == 'factory'
+        env:
+          BUILD_OUTPUT: ${{ steps.factory.outputs.name }}
+          BUILD_VERSION: ${{ steps.factory.outputs.version }}
+        run: |
+          python esphome/scripts/package_release.py "$BUILD_OUTPUT" site/firmware "$BUILD_VERSION" --installer esphome/installer/index.html --source-ref "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@v4
+        if: matrix.profile == 'factory'
+        with:
+          name: esphome-installer
+          path: site
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/esphome-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: esphome-installer
+          path: site
+      - name: Publish ESPHome release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "ESPHome $GITHUB_REF_NAME" --notes "ESPHome firmware for V0.7.3 hardware. Follow the commissioning guide before connecting equipment."
+          gh release upload "$GITHUB_REF_NAME" site/firmware/* --clobber
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+        id: deploy

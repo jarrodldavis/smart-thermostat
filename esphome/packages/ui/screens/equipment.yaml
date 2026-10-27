@@ -1,0 +1,63 @@
+lvgl:
+  pages:
+  - !include
+    file: ../choice_2.yaml
+    vars:
+      entity: equipment
+      title: Equipment
+      previous: heating_fan_page
+      next: compressor_stages_page
+      option0: Conventional
+      option1: Heat pump
+  - !include
+    file: ../choice_2.yaml
+    vars:
+      entity: compressor_stages
+      title: Compressor stages
+      previous: equipment_page
+      next: valve_polarity_page
+      option0: '1'
+      option1: '2'
+  - !include
+    file: ../choice_2.yaml
+    vars:
+      entity: valve_polarity
+      title: Reversing valve
+      previous: compressor_stages_page
+      next: valve_pre_change_delay_page
+      option0: Energized in cooling
+      option1: Energized in heating
+  - !include
+    file: ../number.yaml
+    vars:
+      kind: NONE
+      f_step: 1.0
+      entity: valve_pre_change_delay
+      title: O/B pre-change delay
+      previous: valve_polarity_page
+      next: valve_post_change_delay_page
+  - !include
+    file: ../number.yaml
+    vars:
+      kind: NONE
+      f_step: 1.0
+      entity: valve_post_change_delay
+      title: O/B post-change delay
+      previous: valve_pre_change_delay_page
+      next: retain_valve_on_stop_page
+  - !include
+    file: ../toggle.yaml
+    vars:
+      entity: retain_valve_on_stop
+      title: Retain O/B on stop
+      previous: valve_post_change_delay_page
+      next: heating_fan_page
+  - !include
+    file: ../choice_2.yaml
+    vars:
+      entity: heating_fan
+      title: Heating fan
+      previous: retain_valve_on_stop_page
+      next: equipment_page
+      option0: Equipment controlled
+      option1: Thermostat controlled

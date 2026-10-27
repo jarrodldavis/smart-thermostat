@@ -1,0 +1,11 @@
+# Demonstrates an independent local source without a manual freshness hook.
+substitutions:
+  outdoor_sensor_id: local_outdoor_test
+packages:
+  thermostat: !include ../smart-thermostat.yaml
+sensor:
+  - platform: template
+    id: local_outdoor_test
+    internal: true
+    update_interval: 30s
+    lambda: return 5.0f;

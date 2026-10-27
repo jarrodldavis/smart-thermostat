@@ -1,0 +1,432 @@
+packages:
+  outputs: !include climate/outputs.yaml
+
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+        - script.execute: configure_staging
+        - globals.set: {id: runtime_ready, value: 'true'}
+        # The compressor's last stop time is unknown after a reboot.
+        - script.execute: valve_pre_change
+        - script.execute: apply_hvac
+  on_shutdown:
+    priority: 700
+    then:
+      - script.execute: stop_for_update
+
+globals:
+  - id: commissioned
+    type: bool
+    restore_value: true
+    initial_value: 'false'
+  - id: runtime_ready
+    type: bool
+    initial_value: 'false'
+  - id: updating
+    type: bool
+    initial_value: 'false'
+
+preferences:
+  flash_write_interval: 30s
+
+climate:
+  - platform: thermostat
+    id: hvac_climate
+    name: Thermostat
+    sensor: room_temperature
+    humidity_sensor: room_humidity
+    min_idle_time: 30s
+    min_heating_off_time: ${compressor_off_time}
+    min_heating_run_time: 3min
+    min_cooling_off_time: ${compressor_off_time}
+    min_cooling_run_time: 3min
+    min_fanning_off_time: 1s
+    min_fanning_run_time: 1s
+    min_fan_mode_switching_time: 1s
+    startup_delay: true
+    heat_deadband: 0.5
+    heat_overrun: 0.5
+    cool_deadband: 0.5
+    cool_overrun: 0.5
+    set_point_minimum_differential: 2
+    visual:
+      min_temperature: 7
+      max_temperature: 35
+      temperature_step: 0.5
+    default_preset: Home
+    on_boot_restore_from: memory
+    preset:
+      - name: Home
+        default_target_temperature_low: 20
+        default_target_temperature_high: 24
+        mode: 'OFF'
+    heat_action:
+      - script.execute: reset_stage_requests
+      - script.execute: apply_hvac
+    cool_action:
+      - script.execute: reset_stage_requests
+      - script.execute: apply_hvac
+    idle_action:
+      - script.execute: reset_stage_requests
+      - script.execute: apply_hvac
+    fan_only_action:
+      - script.execute: reset_stage_requests
+      - script.execute: apply_hvac
+    # Native OR policy: delta exceeded OR maximum primary runtime exceeded.
+    # Repeated heating callbacks advance Y2, then backup. ESPHome owns escalation timing.
+    supplemental_heating_delta: 1.0
+    supplemental_cooling_delta: 1.0
+    max_heating_run_time: 5min
+    max_cooling_run_time: 5min
+    supplemental_heating_action:
+      - if:
+          condition:
+            select.is: {id: equipment, options: ['Heat pump']}
+          then:
+            - if:
+                condition:
+                  and:
+                    - select.is: {id: compressor_stages, options: ['2']}
+                    - switch.is_off: stage2_requested
+                then:
+                  - switch.turn_on: stage2_requested
+                else:
+                  - switch.turn_on: local_backup_requested
+      - script.execute: apply_hvac
+    supplemental_cooling_action:
+      - if:
+          condition:
+            select.is: {id: compressor_stages, options: ['2']}
+          then:
+            - switch.turn_on: stage2_requested
+      - script.execute: apply_hvac
+    fan_only_cooling: false
+    heat_cool_mode: true
+    fan_mode_on_action:
+      - switch.turn_on: continuous_fan_requested
+      - script.execute: apply_hvac
+    fan_mode_auto_action:
+      - switch.turn_off: continuous_fan_requested
+      - script.execute: apply_hvac
+    on_state:
+      - script.execute: apply_hvac
+
+select:
+  - platform: template
+    id: equipment
+    name: Equipment
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "${default_equipment}"
+    options:
+      - "Conventional"
+      - "Heat pump"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: compressor_stages
+    name: Compressor stages
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "${default_stages}"
+    options:
+      - "1"
+      - "2"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: backup_type
+    name: Backup heat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "${default_backup}"
+    options:
+      - "None"
+      - "Electric supplemental"
+      - "Furnace replacement"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: valve_polarity
+    name: Reversing valve
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Energized in cooling"
+    options:
+      - "Energized in cooling"
+      - "Energized in heating"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: heating_fan
+    name: Heating fan
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Equipment controlled"
+    options:
+      - "Equipment controlled"
+      - "Thermostat controlled"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: backup_policy
+    name: Backup policy
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Local demand"
+    options:
+      - "Local demand"
+      - "Outdoor temperature"
+      - "Either"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: display_units
+    name: Display units
+    optimistic: true
+    restore_value: true
+    initial_option: Fahrenheit
+    options: [Celsius, Fahrenheit]
+  - platform: template
+    id: outdoor_units
+    name: Outdoor sensor units
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: Celsius
+    options: [Celsius, Fahrenheit]
+    on_value:
+      - script.execute: equipment_changed
+
+number:
+  - platform: template
+    id: valve_pre_change_delay
+    name: Reversing valve pre-change delay
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 300
+    step: 1
+    initial_value: 30
+    unit_of_measurement: "s"
+    on_value:
+      - if:
+          condition:
+            lambda: return id(runtime_ready);
+          then:
+            - script.execute: valve_pre_change
+      - script.execute: equipment_changed
+  - platform: template
+    id: valve_post_change_delay
+    name: Reversing valve post-change delay
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 300
+    step: 1
+    initial_value: 30
+    unit_of_measurement: "s"
+    on_value:
+      - if:
+          condition:
+            lambda: return id(runtime_ready);
+          then:
+            - script.execute: valve_post_change
+      - script.execute: equipment_changed
+  - platform: template
+    id: temperature_offset
+    name: Temperature calibration
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: -10
+    max_value: 10
+    step: 0.1
+    initial_value: 0
+    unit_of_measurement: "°C"
+  - platform: template
+    id: humidity_offset
+    name: Humidity calibration
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: -50
+    max_value: 50
+    step: 1
+    initial_value: 0
+    unit_of_measurement: "%"
+  - platform: template
+    id: stage_delta
+    name: Supplemental demand threshold
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0.5
+    max_value: 10
+    step: 0.5
+    initial_value: 1
+    unit_of_measurement: "°C"
+    on_value:
+      - script.execute: equipment_changed
+      - script.execute: configure_staging
+  - platform: template
+    id: stage_delay
+    name: Supplemental request interval
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 60
+    step: 1
+    initial_value: 5
+    unit_of_measurement: "min"
+    on_value:
+      - script.execute: equipment_changed
+      - script.execute: configure_staging
+  - platform: template
+    id: balance_point
+    name: Outdoor balance point
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: -40
+    max_value: 25
+    step: 0.5
+    initial_value: 0
+    unit_of_measurement: "°C"
+    on_value:
+      - script.execute: equipment_changed
+  - platform: template
+    id: sleep_seconds
+    name: Display timeout
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 5
+    max_value: 300
+    step: 5
+    initial_value: 30
+    unit_of_measurement: "s"
+
+switch:
+  - platform: template
+    id: retain_valve_on_stop
+    name: Retain reversing valve on stop
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - script.execute: equipment_changed
+    on_turn_off:
+      - script.execute: equipment_changed
+  - platform: template
+    id: auto_backup
+    name: Automatic backup heat
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - script.execute: equipment_changed
+    on_turn_off:
+      - script.execute: equipment_changed
+  - platform: template
+    id: balance_confirmed
+    name: Outdoor balance point confirmed
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - script.execute: equipment_changed
+    on_turn_off:
+      - script.execute: equipment_changed
+  - platform: template
+    id: emergency_heat
+    name: Emergency heat
+    restore_mode: ALWAYS_OFF
+    turn_on_action:
+      - if:
+          condition:
+            and:
+              - select.is: {id: equipment, options: ['Heat pump']}
+              - not:
+                  select.is: {id: backup_type, options: ['None']}
+          then:
+            - switch.template.publish: {id: emergency_heat, state: 'ON'}
+            - script.execute: apply_hvac
+    turn_off_action:
+      - switch.template.publish: {id: emergency_heat, state: 'OFF'}
+      - script.execute: apply_hvac
+  - platform: template
+    id: beep_enabled
+    name: Touch beep
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+button:
+  - platform: template
+    id: commission_button
+    name: Confirm equipment setup
+    entity_category: config
+    on_press:
+      - if:
+          condition:
+            and:
+              - or:
+                  - switch.is_off: auto_backup
+                  - select.is: {id: backup_policy, options: ['Local demand']}
+                  - switch.is_on: balance_confirmed
+              - or:
+                  - select.is: {id: equipment, options: ['Heat pump']}
+                  - select.is: {id: backup_type, options: ['None']}
+          then:
+            - globals.set: {id: commissioned, value: 'true'}
+      - climate.control:
+          id: hvac_climate
+          mode: 'OFF'
+      - script.execute: apply_hvac
+  - platform: restart
+    name: Restart
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: template
+    name: Equipment commissioned
+    lambda: return id(commissioned);
+
+script:
+  - id: configure_staging
+    then:
+      - lambda: |-
+          if (!std::isfinite(id(stage_delta).state) || !std::isfinite(id(stage_delay).state)) return;
+          id(hvac_climate).set_supplemental_heat_delta(id(stage_delta).state);
+          id(hvac_climate).set_supplemental_cool_delta(id(stage_delta).state);
+          const auto seconds = uint32_t(id(stage_delay).state * 60);
+          id(hvac_climate).set_heating_maximum_run_time_in_sec(seconds);
+          id(hvac_climate).set_cooling_maximum_run_time_in_sec(seconds);
+  - id: equipment_changed
+    then:
+      - if:
+          condition:
+            lambda: return id(runtime_ready);
+          then:
+            - globals.set: {id: commissioned, value: 'false'}
+            - switch.turn_off: emergency_heat
+            - script.execute: reset_stage_requests
+            - climate.control:
+                id: hvac_climate
+                mode: 'OFF'
+            - script.execute: stop_hvac
+  - id: stop_for_update
+    then:
+      - globals.set: {id: updating, value: 'true'}
+      - script.execute: stop_hvac

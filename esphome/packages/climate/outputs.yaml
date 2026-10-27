@@ -1,0 +1,490 @@
+# Native stateful switches and scripts. No custom HVAC controller or clock loop.
+substitutions:
+  compressor_off_time: 5min
+  stage2_off_time: 5min
+  source_settle_time: 30s
+
+switch:
+  # Requests are native template switches, internal and never restored.
+  - platform: template
+    id: stage2_requested
+    internal: true
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+  - platform: template
+    id: local_backup_requested
+    internal: true
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+  - platform: template
+    id: backup_selected
+    internal: true
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+  - platform: template
+    id: continuous_fan_requested
+    internal: true
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+  # Stateful native wrappers keep GPIO mapping in the hardware package and let
+  # conditions, diagnostics and cooldowns observe actual relay transitions.
+  - platform: output
+    id: relay_w
+    output: hvac_pin_w
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_state:
+      - script.execute: update_fan
+  - platform: output
+    id: relay_y1
+    output: hvac_pin_y1
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_turn_off:
+      - switch.turn_off: relay_y2
+      - if:
+          condition:
+            lambda: return id(runtime_ready);
+          then:
+            - script.execute: compressor_cooldown
+            - script.execute: valve_pre_change
+    on_state:
+      - script.execute: update_fan
+  - platform: output
+    id: relay_y2
+    output: hvac_pin_y2
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_turn_off:
+      - if:
+          condition:
+            lambda: return id(runtime_ready);
+          then:
+            - script.execute: stage2_cooldown
+  - platform: output
+    id: relay_g
+    output: hvac_pin_g
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_state:
+      - script.execute: update_indicators
+  - platform: output
+    id: relay_ob
+    output: hvac_pin_ob
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_state:
+      - if:
+          condition:
+            lambda: return id(runtime_ready);
+          then:
+            - script.execute: valve_post_change
+  - platform: output
+    id: relay_aux
+    output: hvac_pin_aux
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_turn_off:
+      - if:
+          condition:
+            and:
+              - lambda: return id(runtime_ready);
+              - switch.is_off: relay_y1
+          then:
+            - script.execute: backup_settle
+    on_state:
+      - script.execute: update_fan
+
+script:
+  - id: choose_backup
+    then:
+      - if:
+          condition:
+            and:
+              - &heating
+                lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_HEATING;
+              - &heat_pump
+                select.is: {id: equipment, options: ['Heat pump']}
+              - not:
+                  select.is: {id: backup_type, options: ['None']}
+              - switch.is_on: auto_backup
+              - or:
+                  - switch.is_on: backup_selected
+                  - and:
+                      - switch.is_on: local_backup_requested
+                      - or:
+                          - select.is: {id: backup_policy, options: ['Local demand', 'Either']}
+                          - not: &outdoor_available
+                              lambda: return id(balance_confirmed).state && std::isfinite(id(balance_point).state) && std::isfinite(id(outdoor_control_temperature).state);
+                  - and:
+                      - select.is: {id: backup_policy, options: ['Outdoor temperature', 'Either']}
+                      - *outdoor_available
+                      - lambda: |-
+                          const float outdoor = id(outdoor_control_temperature).state;
+                          return (id(outdoor_units).current_option() == "Fahrenheit" ? fahrenheit_to_celsius(outdoor) : outdoor) <= id(balance_point).state;
+          then:
+            - switch.turn_on: backup_selected
+
+  - id: apply_hvac
+    mode: restart
+    then:
+      - if:
+          condition: &enabled
+            lambda: return id(runtime_ready) && id(commissioned) && !id(updating) && std::isfinite(id(room_temperature).state) && id(hvac_climate).mode != climate::CLIMATE_MODE_OFF;
+          then:
+            - script.execute: choose_backup
+            - if:
+                condition: *heating
+                then:
+                  - if:
+                      condition: *heat_pump
+                      then:
+                        - if:
+                            condition: &replacement_heat
+                              and:
+                                - not:
+                                    select.is: {id: backup_type, options: ['None']}
+                                - or:
+                                    - switch.is_on: emergency_heat
+                                    - and:
+                                        - switch.is_on: backup_selected
+                                        - select.is: {id: backup_type, options: ['Furnace replacement']}
+                            then:
+                              - script.stop: start_compressor
+                              - script.stop: start_stage2
+                              - script.stop: change_valve
+                              - switch.turn_off: relay_y2
+                              - switch.turn_off: relay_y1
+                              - switch.turn_off: relay_w
+                              - if:
+                                  condition:
+                                    and:
+                                      - switch.is_off: relay_aux
+                                      - not:
+                                          script.is_running: start_backup
+                                  then:
+                                    - script.execute: start_backup
+                            else:
+                              - script.execute: request_compressor
+                      else:
+                        # State publications also refresh this branch during an
+                        # unchanged call. Stop competing sources without pulsing W.
+                        - script.stop: start_compressor
+                        - script.stop: start_stage2
+                        - script.stop: start_backup
+                        - script.stop: change_valve
+                        - switch.turn_off: relay_y2
+                        - switch.turn_off: relay_y1
+                        - switch.turn_off: relay_aux
+                        - switch.turn_on: relay_w
+                else:
+                  - if:
+                      condition:
+                        and:
+                          - &cooling
+                            lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_COOLING;
+                          - switch.is_off: emergency_heat
+                      then:
+                        - script.execute: request_compressor
+                      else:
+                        - script.execute: stop_heat_sources
+            - script.execute: update_fan
+          else:
+            - script.execute: stop_hvac
+
+  - id: reset_stage_requests
+    then:
+      - switch.turn_off: stage2_requested
+      - switch.turn_off: local_backup_requested
+      - switch.turn_off: backup_selected
+
+  - id: stop_heat_sources
+    then:
+      - script.stop: start_compressor
+      - script.stop: start_stage2
+      - script.stop: start_backup
+      - script.stop: change_valve
+      # Remove Y2 before Y1. No other script writes a heat source out of order.
+      - switch.turn_off: relay_y2
+      - switch.turn_off: relay_y1
+      - switch.turn_off: relay_w
+      - switch.turn_off: relay_aux
+
+  - id: stop_hvac
+    then:
+      - script.execute: stop_heat_sources
+      - script.execute: reset_stage_requests
+      - switch.turn_off: relay_g
+      - if:
+          condition:
+            and:
+              - switch.is_off: retain_valve_on_stop
+              - switch.is_on: relay_ob
+          then:
+            - script.execute: {id: change_valve, energize: false}
+      - script.execute: update_indicators
+
+  - id: request_compressor
+    then:
+      - script.stop: start_backup
+      - switch.turn_off: relay_w
+      # A standalone backup must stop before returning to the compressor.
+      - if:
+          condition: {switch.is_off: relay_y1}
+          then:
+            - switch.turn_off: relay_aux
+      - if:
+          condition: *heat_pump
+          then:
+            - if:
+                condition: &valve_energized
+                  or:
+                    - and:
+                        - *heating
+                        - select.is: {id: valve_polarity, options: ['Energized in heating']}
+                    - and:
+                        - *cooling
+                        - select.is: {id: valve_polarity, options: ['Energized in cooling']}
+                then:
+                  - if:
+                      condition: {switch.is_off: relay_ob}
+                      then:
+                        - script.execute: {id: change_valve, energize: true}
+                      else:
+                        - script.stop: change_valve
+                else:
+                  - if:
+                      condition: {switch.is_on: relay_ob}
+                      then:
+                        - script.execute: {id: change_valve, energize: false}
+                      else:
+                        - script.stop: change_valve
+      - if:
+          condition:
+            and:
+              - switch.is_off: relay_y1
+              - not:
+                  script.is_running: start_compressor
+          then:
+            - script.execute: start_compressor
+      - script.execute: update_compressor_stages
+
+  # The pre-change timer starts at an actual Y1 falling edge, or conservatively
+  # at boot/configuration changes. Repeated requests cannot extend its deadline.
+  - id: valve_pre_change
+    mode: restart
+    then:
+      - delay: !lambda return uint32_t(id(valve_pre_change_delay).state * 1000);
+      - script.execute: apply_hvac
+
+  - id: change_valve
+    mode: restart
+    parameters:
+      energize: bool
+    then:
+      - script.stop: start_stage2
+      - switch.turn_off: relay_y2
+      - switch.turn_off: relay_y1
+      - switch.turn_off: relay_aux
+      - wait_until:
+          not: {script.is_running: valve_pre_change}
+      - if:
+          condition:
+            and:
+              - switch.is_off: relay_y1
+              - switch.is_off: relay_y2
+              - or:
+                  - and:
+                      - *enabled
+                      - *heat_pump
+                      - or:
+                          - and:
+                              - lambda: return energize;
+                              - *valve_energized
+                          - and:
+                              - lambda: return !energize;
+                              - not: *valve_energized
+                  - and:
+                      - not: *enabled
+                      - switch.is_off: retain_valve_on_stop
+                      - lambda: return !energize;
+          then:
+            - switch.control:
+                id: relay_ob
+                state: !lambda return energize;
+
+  - id: start_compressor
+    mode: single
+    then:
+      - wait_until:
+          and:
+            - not: {script.is_running: compressor_cooldown}
+            - not: {script.is_running: valve_post_change}
+            - not: {script.is_running: change_valve}
+            - not: {script.is_running: backup_settle}
+      # Recheck intent after the wait; cancellation and this guard both prevent
+      # an old delayed action from energizing hardware after Off/fault/takeover.
+      - if:
+          condition:
+            and:
+              - *enabled
+              - or:
+                  - and:
+                      - *cooling
+                      - switch.is_off: emergency_heat
+                  - and:
+                      - *heating
+                      - *heat_pump
+                      - not: *replacement_heat
+          then:
+            - switch.turn_on: relay_y1
+            - script.execute: update_compressor_stages
+            - script.execute: update_fan
+
+  - id: update_compressor_stages
+    then:
+      - if:
+          condition:
+            and:
+              - *enabled
+              - switch.is_on: relay_y1
+              - switch.is_on: stage2_requested
+              - select.is: {id: compressor_stages, options: ['2']}
+              - switch.is_off: emergency_heat
+          then:
+            - if:
+                condition:
+                  and:
+                    - switch.is_off: relay_y2
+                    - not: {script.is_running: start_stage2}
+                then:
+                  - script.execute: start_stage2
+          else:
+            - script.stop: start_stage2
+            - switch.turn_off: relay_y2
+      - if:
+          condition:
+            and:
+              - *enabled
+              - *heating
+              - *heat_pump
+              - switch.is_on: relay_y1
+              - switch.is_on: backup_selected
+              - select.is: {id: backup_type, options: ['Electric supplemental']}
+              - switch.is_off: emergency_heat
+          then:
+            - switch.turn_on: relay_aux
+          else:
+            - switch.turn_off: relay_aux
+
+  - id: start_stage2
+    mode: single
+    then:
+      - wait_until:
+          not: {script.is_running: stage2_cooldown}
+      - if:
+          condition:
+            and:
+              - *enabled
+              - switch.is_on: relay_y1
+              - switch.is_on: stage2_requested
+              - select.is: {id: compressor_stages, options: ['2']}
+              - switch.is_off: emergency_heat
+          then:
+            - switch.turn_on: relay_y2
+
+  - id: start_backup
+    mode: single
+    then:
+      - delay: ${source_settle_time}
+      - wait_until:
+          not: {script.is_running: backup_settle}
+      - if:
+          condition:
+            and:
+              - *enabled
+              - *heating
+              - *heat_pump
+              - *replacement_heat
+              - switch.is_off: relay_y1
+              - switch.is_off: relay_y2
+          then:
+            - switch.turn_on: relay_aux
+            - script.execute: update_fan
+
+  # Native scripts provide the actual-relay lockouts shared across directions.
+  # Their running state is the condition; there are no custom timestamps.
+  - id: compressor_cooldown
+    mode: restart
+    then:
+      - delay: ${compressor_off_time}
+      - script.execute: apply_hvac
+  - id: stage2_cooldown
+    mode: restart
+    then:
+      - delay: ${stage2_off_time}
+      - script.execute: apply_hvac
+  - id: valve_post_change
+    mode: restart
+    then:
+      - delay: !lambda return uint32_t(id(valve_post_change_delay).state * 1000);
+      - script.execute: apply_hvac
+  - id: backup_settle
+    mode: restart
+    then:
+      - delay: ${source_settle_time}
+      - script.execute: apply_hvac
+
+  - id: update_fan
+    then:
+      - if:
+          condition:
+            and:
+              - *enabled
+              - or:
+                  - switch.is_on: continuous_fan_requested
+                  - lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_FAN;
+                  - switch.is_on: relay_y1
+                  - and:
+                      - switch.is_on: relay_w
+                      - select.is: {id: heating_fan, options: ['Thermostat controlled']}
+                  - and:
+                      - switch.is_on: relay_aux
+                      - or:
+                          - select.is: {id: backup_type, options: ['Electric supplemental']}
+                          - select.is: {id: heating_fan, options: ['Thermostat controlled']}
+          then:
+            - switch.turn_on: relay_g
+          else:
+            - switch.turn_off: relay_g
+      - script.execute: update_indicators
+
+  - id: update_indicators
+    then:
+      - if:
+          condition:
+            or:
+              - switch.is_on: relay_w
+              - switch.is_on: relay_aux
+              - and:
+                  - switch.is_on: relay_y1
+                  - *heating
+          then:
+            - output.turn_on: led_heat
+          else:
+            - output.turn_off: led_heat
+      - if:
+          condition:
+            and:
+              - switch.is_on: relay_y1
+              - *cooling
+          then:
+            - output.turn_on: led_cool
+          else:
+            - output.turn_off: led_cool
+      - if:
+          condition: {switch.is_on: relay_g}
+          then:
+            - output.turn_on: led_fan
+          else:
+            - output.turn_off: led_fan

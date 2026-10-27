@@ -1,0 +1,146 @@
+esphome:
+  on_boot:
+    - priority: 500
+      then:
+        # ESPHome 2026.10 XPT2046 setup sends its initial command with CS HIGH.
+        # Select the chip once after touch setup (600) to enable PENIRQ.
+        - lambda: |-
+            uint8_t command[] = {0xD0, 0x00, 0x00};
+            id(panel_touch).enable();
+            id(panel_touch).transfer_array(command, sizeof(command));
+            id(panel_touch).disable();
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [wifi_setup_password]
+
+wifi_setup_password:
+  id: setup_credentials
+
+esp32:
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+spi:
+  clk_pin: GPIO13
+  mosi_pin: GPIO12
+  miso_pin: GPIO21
+
+i2c:
+  sda: GPIO36
+  scl: GPIO35
+  frequency: 50kHz
+  scan: true
+
+uart:
+  id: radar_uart
+  rx_pin: GPIO15
+  tx_pin: GPIO16
+  baud_rate: 256000
+ld2410:
+  uart_id: radar_uart
+
+output:
+  - platform: gpio
+    id: hvac_pin_w
+    pin: GPIO5
+  - platform: gpio
+    id: hvac_pin_y1
+    pin: GPIO6
+  - platform: gpio
+    id: hvac_pin_y2
+    pin: GPIO41
+  - platform: gpio
+    id: hvac_pin_g
+    pin: GPIO4
+  - platform: gpio
+    id: hvac_pin_ob
+    pin: GPIO7
+  - platform: gpio
+    id: hvac_pin_aux
+    pin: GPIO39
+  - platform: gpio
+    id: led_heat
+    pin: GPIO38
+  - platform: gpio
+    id: led_cool
+    pin: GPIO2
+  - platform: gpio
+    id: led_fan
+    pin: GPIO37
+  - platform: ledc
+    id: backlight_pwm
+    pin: GPIO14
+    # Adjacent LEDC channels share a timer; keep the 4 kHz buzzer separate.
+    channel: 0
+    frequency: 20000Hz
+  - platform: ledc
+    id: buzzer_pwm
+    pin: GPIO17
+    channel: 2
+    frequency: 4000Hz
+
+# Deselect the unused SD slot on the shared SPI bus.
+switch:
+  - platform: gpio
+    id: sd_deselect
+    internal: true
+    pin: GPIO40
+    restore_mode: ALWAYS_ON
+  - platform: template
+    id: auto_brightness
+    name: Automatic screen brightness
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+light:
+  - platform: monochromatic
+    id: screen_backlight
+    internal: true
+    output: backlight_pwm
+    # Screen brightness is a PWM duty level, not a gamma-corrected room light.
+    gamma_correct: 1.0
+    default_transition_length: 500ms
+    restore_mode: ALWAYS_ON
+
+display:
+  - platform: mipi_spi
+    id: panel
+    model: ILI9341
+    cs_pin: GPIO9
+    dc_pin: GPIO11
+    reset_pin: GPIO10
+    dimensions:
+      width: 240
+      height: 320
+    data_rate: 20MHz
+    update_interval: never
+    auto_clear_enabled: false
+
+touchscreen:
+  - platform: xpt2046
+    id: panel_touch
+    display: panel
+    cs_pin: GPIO47
+    # Verified PENIRQ input; touch_timeout schedules release rechecks.
+    # Threshold stays above measured idle noise (up to 496).
+    data_rate: 1MHz
+    interrupt_pin: GPIO48
+    threshold: 600
+    touch_timeout: 80ms
+    calibration:
+      x_min: 260
+      x_max: 3800
+      y_min: 350
+      y_max: 3800
+    transform:
+      # LVGL rotates portrait input by 90 degrees; portrait Y becomes screen X.
+      mirror_y: true
+    # Resume after release, so the waking touch cannot activate a widget.
+    on_release:
+      - script.execute: wake_screen

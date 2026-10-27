@@ -1,0 +1,7 @@
+# CI profile: runtime defaults only; commissioning remains required.
+substitutions:
+  default_equipment: Heat pump
+  default_stages: '1'
+  default_backup: Furnace replacement
+packages:
+  thermostat: !include ../smart-thermostat.yaml

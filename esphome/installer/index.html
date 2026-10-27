@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install Smart Thermostat</title>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"></script>
+  <style>
+    :root { color-scheme: light dark; font: 17px/1.65 system-ui, sans-serif; }
+    body { max-width: 720px; margin: 4rem auto; padding: 0 1.25rem; }
+    h1 { line-height: 1.15; font-size: 2.7rem; }
+    .notice { border-left: 4px solid #e6a23c; padding: .75rem 1rem; background: #8881; }
+    button { font: inherit; border: 0; border-radius: .5rem; padding: .8rem 1.4rem; background: #1678ba; color: white; cursor: pointer; }
+    a { color: light-dark(#12649a, #85caff); }
+    footer { margin-top: 3rem; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <p>LOCAL CONTROL · ESPHOME · V0.7.3 HARDWARE</p>
+  <h1>Smart Thermostat</h1>
+  <p>Install, connect to Wi-Fi, and bring your thermostat into Home Assistant.</p>
+  <p class="notice">For the ESP32-S3 V0.7.3 prototype with 16 MB flash only.
+    Disconnect the board from the UWP and HVAC wiring before USB installation.
+    When migrating from legacy firmware, select “Erase device” in the installer’s advanced options; this removes existing settings. HVAC outputs remain disabled until you confirm equipment setup.</p>
+  <ol>
+    <li>Record your existing thermostat settings. Connect the disconnected board by USB using a data cable.</li>
+    <li>Install the firmware below and enter your Wi-Fi credentials when prompted.</li>
+    <li>In Home Assistant, open <strong>Settings → Devices &amp; services</strong> and add the discovered ESPHome device.</li>
+    <li>In <strong>ESPHome Device Builder</strong>, adopt the device to create your editable configuration and configure API encryption.</li>
+    <li>Follow the commissioning guide before reconnecting HVAC equipment. Confirm the provisional GPIO41/Y2 mapping.</li>
+  </ol>
+  <esp-web-install-button manifest="firmware/manifest.json">
+    <button slot="activate">Install Smart Thermostat</button>
+    <p slot="unsupported">This browser does not support Web Serial. Use a desktop browser with Web Serial support, or install through ESPHome Device Builder using USB.</p>
+    <p slot="not-allowed">Open this installer over HTTPS to use USB installation.</p>
+  </esp-web-install-button>
+  <p>If serial Wi-Fi provisioning is unavailable, open Diagnostics → Wi-Fi setup on the thermostat. The protected fallback network starts automatically when Wi-Fi is unavailable. Join the displayed network using its on-screen password, then open 192.168.4.1.</p>
+  <p><a href="https://github.com/jarrodldavis/smart-thermostat/blob/__SOURCE_REF__/esphome/README.md">Commissioning and recovery guide</a> ·
+    <a href="firmware/SHA256SUMS">Firmware checksums</a> ·
+    <a href="https://github.com/jarrodldavis/smart-thermostat/releases">Releases</a></p>
+  <footer>Project: smeisner.smart-thermostat. Equipment and terminal checks are required before use.</footer>
+</body>
+</html>

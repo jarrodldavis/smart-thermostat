@@ -1,0 +1,34 @@
+lvgl:
+  pages:
+  - !include
+    file: ../choice_2.yaml
+    vars:
+      entity: display_units
+      title: Display units
+      previous: beep_enabled_page
+      next: sleep_seconds_page
+      option0: Celsius
+      option1: Fahrenheit
+  - !include
+    file: ../number.yaml
+    vars:
+      kind: NONE
+      f_step: 1.0
+      entity: sleep_seconds
+      title: Display timeout
+      previous: display_units_page
+      next: auto_brightness_page
+  - !include
+    file: ../toggle.yaml
+    vars:
+      entity: auto_brightness
+      title: Automatic brightness
+      previous: sleep_seconds_page
+      next: beep_enabled_page
+  - !include
+    file: ../toggle.yaml
+    vars:
+      entity: beep_enabled
+      title: Touch beep
+      previous: auto_brightness_page
+      next: display_units_page

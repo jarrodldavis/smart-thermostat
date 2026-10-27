@@ -1,0 +1,25 @@
+# Shared declarative layout; include vars resolve to explicit IDs and native actions.
+buttonmatrix:
+  scrollable: false
+  rows:
+  - buttons:
+    - text: Previous
+      control:
+        no_repeat: true
+      on_click:
+      - lvgl.page.show: ${previous}
+      - script.execute: ui_beep
+    - text: Settings
+      control:
+        no_repeat: true
+      on_click:
+      - lvgl.page.show: settings_menu
+      - script.execute: ui_beep
+    - text: Next
+      control:
+        no_repeat: true
+      on_click:
+      - lvgl.page.show: ${next}
+      - script.execute: ui_beep
+  grid_cell_row_pos: ${row}
+  grid_cell_column_pos: ${column}

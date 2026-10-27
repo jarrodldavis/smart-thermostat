@@ -1,0 +1,61 @@
+lvgl:
+  pages:
+  - !include
+    file: ../choice_3.yaml
+    vars:
+      entity: backup_type
+      title: Backup type
+      previous: emergency_heat_page
+      next: auto_backup_page
+      option0: None
+      option1: Electric supplemental
+      option2: Furnace replacement
+  - !include
+    file: ../toggle.yaml
+    vars:
+      entity: auto_backup
+      title: Automatic backup
+      previous: backup_type_page
+      next: backup_policy_page
+  - !include
+    file: ../choice_3.yaml
+    vars:
+      entity: backup_policy
+      title: Backup policy
+      previous: auto_backup_page
+      next: balance_point_page
+      option0: Local demand
+      option1: Outdoor temperature
+      option2: Either
+  - !include
+    file: ../number.yaml
+    vars:
+      kind: ABSOLUTE
+      f_step: 1.0
+      entity: balance_point
+      title: Balance point
+      previous: backup_policy_page
+      next: balance_confirmed_page
+  - !include
+    file: ../toggle.yaml
+    vars:
+      entity: balance_confirmed
+      title: Balance point confirmed
+      previous: balance_point_page
+      next: outdoor_units_page
+  - !include
+    file: ../choice_2.yaml
+    vars:
+      entity: outdoor_units
+      title: Outdoor sensor units
+      previous: balance_confirmed_page
+      next: emergency_heat_page
+      option0: Celsius
+      option1: Fahrenheit
+  - !include
+    file: ../toggle.yaml
+    vars:
+      entity: emergency_heat
+      title: Emergency heat
+      previous: outdoor_units_page
+      next: backup_type_page

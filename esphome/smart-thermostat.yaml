@@ -1,0 +1,49 @@
+# Public import entrypoint. Run scripts/prepare_release.py before tagging.
+substitutions:
+  name: smart-thermostat
+  friendly_name: Smart Thermostat
+  project_version: development
+  package_ref: esphome-v0.1.0
+  outdoor_entity: sensor.smart_thermostat_outdoor_temperature
+  outdoor_sensor_id: outdoor_temperature
+  default_equipment: Conventional
+  default_stages: '1'
+  default_backup: None
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: true
+  min_version: 2026.10.0
+  project:
+    name: smeisner.smart-thermostat
+    version: ${project_version}
+
+packages:
+  hardware: !include packages/hardware.yaml
+  sensors: !include packages/sensors.yaml
+  climate: !include packages/climate.yaml
+  ui: !include packages/ui.yaml
+
+dashboard_import:
+  package_import_url: github://jarrodldavis/smart-thermostat/esphome/smart-thermostat.yaml@${package_ref}
+  import_full_config: false
+
+logger:
+  logs:
+    xpt2046: INFO
+    touchscreen: INFO
+api:
+  reboot_timeout: 0s
+wifi:
+  reboot_timeout: 0s
+  # The helper assigns a random password before native Wi-Fi setup, including
+  # safe mode. ESPHome manages fallback activation and the captive portal.
+  ap: {}
+captive_portal:
+improv_serial:
+ota:
+  - platform: esphome
+    on_begin:
+      - script.execute: stop_for_update
+safe_mode:
