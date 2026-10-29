@@ -1,4 +1,3 @@
-# Shared declarative layout; include vars resolve to explicit IDs and native actions.
 buttonmatrix:
   scrollable: false
   rows:

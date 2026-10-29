@@ -34,11 +34,11 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I esphome/tests/host -isystem "$ESPHOME_INCLUDE" esphome/tests/test_helpers.cpp -o /tmp/test-helpers
           /tmp/test-helpers
           python -m unittest discover -s esphome/tests -p 'test_*.py' -v
-      - name: Run real native thermostat integration
+      - name: Run thermostat integration tests
         run: |
           esphome compile esphome/tests/host/thermostat.yaml
-          NATIVE_TEST_PREFS=$(mktemp -d)
-          ESPHOME_PREFDIR="$NATIVE_TEST_PREFS" timeout 120s esphome/tests/host/.esphome/build/native-thermostat-test/.pioenvs/native-thermostat-test/program
+          THERMOSTAT_TEST_PREFS=$(mktemp -d)
+          ESPHOME_PREFDIR="$THERMOSTAT_TEST_PREFS" timeout 120s esphome/tests/host/.esphome/build/thermostat-test/.pioenvs/thermostat-test/program
       - name: Validate factory and all equipment profiles
         run: |
           esphome config esphome/smart-thermostat.yaml

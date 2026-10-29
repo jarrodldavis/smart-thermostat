@@ -1,5 +1,5 @@
-# Runs the real ESPHome thermostat and production climate package on the host.
-# Only the sensors and physical GPIO outputs are replaced with native templates.
+# Runs the thermostat and climate package on the host.
+# Sensors and GPIO outputs use templates for host execution.
 substitutions:
   default_equipment: Heat pump
   default_stages: '2'
@@ -9,18 +9,17 @@ substitutions:
   source_settle_time: 1s
 
 esphome:
-  name: native-thermostat-test
+  name: thermostat-test
   compile_process_limit: 4
   includes:
-    - native_thermostat_test.h
+    - thermostat_test.h
   on_boot:
     - priority: -200
       then:
         - switch.turn_on: auto_backup
         - lambda: |-
             id(commissioned) = true;
-            // Accelerate native timers; fixture-only overrides below also
-            // shorten physical interlocks without replacing their implementation.
+            // Short test durations cover controller timers and output interlocks.
             id(hvac_climate).set_heating_minimum_off_time_in_sec(1);
             id(hvac_climate).set_cooling_minimum_off_time_in_sec(1);
             id(hvac_climate).set_heating_minimum_run_time_in_sec(10);
@@ -35,49 +34,48 @@ esphome:
             target_temperature_high: 24
         - delay: 250ms
         - lambda: |-
-            native_test::check(!id(relay_y1).state, "native startup lockout");
-            native_test::check(!id(stage2_requested).state && !id(local_backup_requested).state, "no stages before native heat");
+            thermostat_test::check(!id(relay_y1).state, "startup lockout");
+            thermostat_test::check(!id(stage2_requested).state && !id(local_backup_requested).state, "no stages before heat");
         - delay: 1s
         - lambda: |-
-            native_test::check(id(hvac_climate).action == climate::CLIMATE_ACTION_HEATING, "native heat action");
-            native_test::check(id(relay_y1).state, "native heat action applies outputs immediately");
-            native_test::check(id(stage2_requested).state && !id(local_backup_requested).state, "first native supplemental callback");
-            native_test::check(id(relay_y2).state && !id(relay_aux).state, "first callback selects Y2 only");
+            thermostat_test::check(id(hvac_climate).action == climate::CLIMATE_ACTION_HEATING, "heat action");
+            thermostat_test::check(id(relay_y1).state, "heat action applies outputs immediately");
+            thermostat_test::check(id(stage2_requested).state && !id(local_backup_requested).state, "first supplemental callback");
+            thermostat_test::check(id(relay_y2).state && !id(relay_aux).state, "first callback selects Y2 only");
         - delay: 1100ms
         - lambda: |-
-            native_test::check(id(stage2_requested).state && id(local_backup_requested).state, "repeated native supplemental callback");
-            native_test::check(id(relay_y1).state && id(relay_y2).state && id(relay_aux).state,
+            thermostat_test::check(id(stage2_requested).state && id(local_backup_requested).state, "repeated supplemental callback");
+            thermostat_test::check(id(relay_y1).state && id(relay_y2).state && id(relay_aux).state,
                                "second callback selects electric backup");
             id(room_temperature).publish_state(25);
-            native_test::check(id(hvac_climate).action == climate::CLIMATE_ACTION_HEATING,
-                               "native minimum run timer holds the call");
-            native_test::check(id(relay_y1).state, "routing follows native minimum run timer");
-            // Stop further periodic supplemental callbacks so only the native
-            // interlock retry can resume physical compressor operation below.
+            thermostat_test::check(id(hvac_climate).action == climate::CLIMATE_ACTION_HEATING,
+                               "minimum run timer holds the call");
+            thermostat_test::check(id(relay_y1).state, "routing follows minimum run timer");
+            // Suspend supplemental callbacks to isolate the interlock retry.
             id(hvac_climate).set_heating_maximum_run_time_in_sec(60);
             id(room_temperature).publish_state(NAN);
-            native_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state,
+            thermostat_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state,
                                "sensor fault overrides minimum run immediately");
-            native_test::check(!id(stage2_requested).state && !id(local_backup_requested).state, "fault clears stage requests");
+            thermostat_test::check(!id(stage2_requested).state && !id(local_backup_requested).state, "fault clears stage requests");
             id(room_temperature).publish_state(18.5f);
-            native_test::check(!id(relay_y1).state, "actual compressor stop starts physical lockout");
+            thermostat_test::check(!id(relay_y1).state, "actual compressor stop starts physical lockout");
         - climate.control:
             id: hvac_climate
             fan_mode: 'ON'
-        - lambda: native_test::before_wait = native_test::routing_evaluations;
+        - lambda: thermostat_test::before_wait = thermostat_test::routing_evaluations;
         - delay: 1100ms
         - lambda: |-
-            native_test::check(native_test::routing_evaluations <= native_test::before_wait + 2,
+            thermostat_test::check(thermostat_test::routing_evaluations <= thermostat_test::before_wait + 2,
                                "only pre-change and backup-settle deadlines wake HVAC during the wait");
-            native_test::check(id(continuous_fan_requested).state && id(relay_g).state, "native fan-mode callback");
+            thermostat_test::check(id(continuous_fan_requested).state && id(relay_g).state, "fan-mode callback");
         - delay: 1200ms
         - lambda: |-
-            native_test::check(id(relay_y1).state, "scheduled interlock retry resumes native demand");
+            thermostat_test::check(id(relay_y1).state, "scheduled interlock retry resumes demand");
         - climate.control:
             id: hvac_climate
             mode: 'OFF'
         - lambda: |-
-            native_test::check(!id(relay_g).state && !id(relay_y1).state && !id(relay_aux).state,
+            thermostat_test::check(!id(relay_g).state && !id(relay_y1).state && !id(relay_aux).state,
                                "explicit off overrides fan and heating");
         - script.execute: equipment_scenarios
 
@@ -86,11 +84,11 @@ logger:
   level: WARN
 packages:
   climate: !include ../../packages/climate.yaml
-# Instrument evaluations without substituting production actions.
+# Count output-routing evaluations.
 script:
   - id: !extend apply_hvac
     then:
-      - lambda: ++native_test::routing_evaluations;
+      - lambda: ++thermostat_test::routing_evaluations;
   - id: set_test_timings
     then:
       - lambda: |-
@@ -106,7 +104,7 @@ script:
       - climate.control: {id: hvac_climate, mode: 'OFF', fan_mode: AUTO}
       - script.execute: set_test_timings
       - delay: 2200ms
-      # An active native timer setter can complete its timer without storing
+      # An active timer setter can complete its timer without storing
       # the new duration. Apply fixture overrides again after reaching idle.
       - script.execute: set_test_timings
       - button.press: commission_button
@@ -122,28 +120,28 @@ script:
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_w}, timeout: 3s}
       - lambda: |-
-          native_test::check(id(relay_w).state && id(relay_g).state, "conventional heat and heating fan ownership");
-          native_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "conventional heat uses W only");
-          // Check physical falling edges, since the old bug restored the final
-          // W/G state and would pass an assertion of switch state alone.
-          const unsigned w_stops = native_test::falling_edges[0];
-          const unsigned fan_stops = native_test::falling_edges[3];
+          thermostat_test::check(id(relay_w).state && id(relay_g).state, "conventional heat and heating fan ownership");
+          thermostat_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "conventional heat uses W only");
+          // Falling-edge counts detect brief W/G interruptions that final-state
+          // assertions cannot detect.
+          const unsigned w_stops = thermostat_test::falling_edges[0];
+          const unsigned fan_stops = thermostat_test::falling_edges[3];
           id(room_temperature).publish_state(18.6f);
           id(room_humidity).publish_state(40);
           id(room_temperature).publish_state(18.7f);
           id(room_humidity).publish_state(41);
-          native_test::check(native_test::falling_edges[0] == w_stops, "sensor updates must not pulse conventional W");
-          native_test::check(native_test::falling_edges[3] == fan_stops, "sensor updates must not pulse thermostat-owned heating fan");
+          thermostat_test::check(thermostat_test::falling_edges[0] == w_stops, "sensor updates must not pulse conventional W");
+          thermostat_test::check(thermostat_test::falling_edges[3] == fan_stops, "sensor updates must not pulse thermostat-owned heating fan");
       - sensor.template.publish: {id: room_temperature, state: 20.5}
       - wait_until: {condition: {switch.is_off: relay_w}, timeout: 3s}
-      - lambda: native_test::check(!id(relay_w).state, "native thermostat ends the heating call");
+      - lambda: thermostat_test::check(!id(relay_w).state, "thermostat ends the heating call");
       - sensor.template.publish: {id: room_temperature, state: 27}
       - climate.control: {id: hvac_climate, mode: COOL}
       - wait_until: {condition: {switch.is_on: relay_y2}, timeout: 4s}
-      - lambda: native_test::check(id(relay_y1).state && id(relay_y2).state && id(relay_g).state && !id(relay_w).state, "two-stage conventional cooling");
+      - lambda: thermostat_test::check(id(relay_y1).state && id(relay_y2).state && id(relay_g).state && !id(relay_w).state, "two-stage conventional cooling");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
-      # Real repeated callbacks must select Y2 before furnace takeover.
+      # Repeated supplemental callbacks must select Y2 before furnace takeover.
       - select.set: {id: equipment, option: Heat pump}
       - select.set: {id: backup_type, option: Furnace replacement}
       - select.set: {id: heating_fan, option: Equipment controlled}
@@ -151,12 +149,12 @@ script:
       - script.wait: prepare_equipment_test
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_y2}, timeout: 3s}
-      - lambda: native_test::check(id(relay_y2).state && !id(relay_aux).state, "Y2 precedes furnace backup");
+      - lambda: thermostat_test::check(id(relay_y2).state && !id(relay_aux).state, "Y2 precedes furnace backup");
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 4s}
-      - lambda: native_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state && !id(relay_g).state, "furnace takeover and equipment-owned fan");
+      - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state && !id(relay_g).state, "furnace takeover and equipment-owned fan");
       - sensor.template.publish: {id: room_temperature, state: 19.9}
       - delay: 100ms
-      - lambda: native_test::check(id(relay_aux).state, "backup stays selected until native call ends");
+      - lambda: thermostat_test::check(id(relay_aux).state, "backup stays selected until call ends");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
       # Emergency takeover, return, and cancellation during its pending delay.
@@ -167,23 +165,23 @@ script:
       - wait_until: {condition: {switch.is_on: relay_y2}, timeout: 3s}
       - switch.turn_on: emergency_heat
       - delay: 100ms
-      - lambda: native_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "furnace emergency transition is all off");
+      - lambda: thermostat_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "furnace emergency transition is all off");
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 2s}
-      - lambda: native_test::check(id(relay_aux).state, "emergency backup starts after native script delay");
+      - lambda: thermostat_test::check(id(relay_aux).state, "emergency backup starts after script delay");
       - switch.turn_off: emergency_heat
-      - lambda: native_test::check(!id(relay_aux).state && !id(relay_y1).state, "backup stops before compressor return");
+      - lambda: thermostat_test::check(!id(relay_aux).state && !id(relay_y1).state, "backup stops before compressor return");
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 4s}
-      - lambda: native_test::check(id(relay_y1).state && !id(relay_aux).state, "compressor returns through native cooldown waits");
+      - lambda: thermostat_test::check(id(relay_y1).state && !id(relay_aux).state, "compressor returns through cooldown waits");
       - switch.turn_on: emergency_heat
       - delay: 100ms
       - sensor.template.publish: {id: room_temperature, state: !lambda return NAN;}
       - delay: 1200ms
       - lambda: |-
-          native_test::check(!id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "fault cancels pending furnace start");
-          native_test::check(!id(start_backup).is_running() && !id(start_compressor).is_running(), "fault cancels delayed scripts");
+          thermostat_test::check(!id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "fault cancels pending furnace start");
+          thermostat_test::check(!id(start_backup).is_running() && !id(start_compressor).is_running(), "fault cancels delayed scripts");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
-      # Outdoor selection, latch, and stale-data fallback to native callbacks.
+      # Outdoor selection, latch, and stale-data fallback to callbacks.
       - select.set: {id: backup_policy, option: Outdoor temperature}
       - number.set: {id: balance_point, value: 0}
       - switch.turn_on: balance_confirmed
@@ -193,19 +191,19 @@ script:
       - script.wait: prepare_equipment_test
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 3s}
-      - lambda: native_test::check(id(relay_aux).state && !id(relay_y1).state, "outdoor policy selects furnace");
+      - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state, "outdoor policy selects furnace");
       - sensor.template.publish: {id: outdoor_control_temperature, state: 10}
       - script.execute: apply_hvac
-      - lambda: native_test::check(id(relay_aux).state, "outdoor recovery does not interrupt selected backup");
+      - lambda: thermostat_test::check(id(relay_aux).state, "outdoor recovery does not interrupt selected backup");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
       - sensor.template.publish: {id: outdoor_control_temperature, state: !lambda return NAN;}
       - script.execute: prepare_equipment_test
       - script.wait: prepare_equipment_test
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_y2}, timeout: 3s}
-      - lambda: native_test::check(id(relay_y2).state && !id(relay_aux).state, "stale outdoor data permits native first supplemental stage");
+      - lambda: thermostat_test::check(id(relay_y2).state && !id(relay_aux).state, "stale outdoor data permits first supplemental stage");
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 4s}
-      - lambda: native_test::check(id(relay_aux).state && !id(relay_y1).state, "stale outdoor fallback uses later native callback");
+      - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state, "stale outdoor fallback uses later callback");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
       # Single-stage heat pump: first callback selects electric backup; Either
@@ -218,9 +216,9 @@ script:
       - script.wait: prepare_equipment_test
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 3s}
-      - lambda: native_test::check(id(relay_aux).state && id(relay_y1).state && !id(relay_y2).state, "single-stage electric backup on first native callback");
+      - lambda: thermostat_test::check(id(relay_aux).state && id(relay_y1).state && !id(relay_y2).state, "single-stage electric backup on first callback");
       - switch.turn_on: emergency_heat
-      - lambda: native_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "electric emergency heat uses AUX exclusively");
+      - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "electric emergency heat uses AUX exclusively");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
       - select.set: {id: backup_type, option: Furnace replacement}
@@ -229,7 +227,7 @@ script:
       - script.wait: prepare_equipment_test
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 3s}
-      - lambda: native_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "single-stage furnace backup on first native callback");
+      - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "single-stage furnace backup on first callback");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
       - select.set: {id: backup_type, option: None}
@@ -240,21 +238,21 @@ script:
       - delay: 1100ms
       - switch.turn_on: emergency_heat
       - lambda: |-
-          native_test::check(id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "no-backup single-stage equipment");
-          native_test::check(!id(emergency_heat).state, "unsupported emergency heat cannot activate");
+          thermostat_test::check(id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "no-backup single-stage equipment");
+          thermostat_test::check(!id(emergency_heat).state, "unsupported emergency heat cannot activate");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
       # Heat/cool reversals must settle O/B and share the physical compressor
-      # off timer even though the native heat and cool timers are independent.
+      # off timer even though the heat and cool timers are independent.
       - sensor.template.publish: {id: room_temperature, state: 27}
       - climate.control: {id: hvac_climate, mode: COOL}
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 4s}
-      - lambda: native_test::check(id(relay_y1).state && id(relay_ob).state && !id(relay_y2).state, "heat-pump cooling energizes O/B after settling");
+      - lambda: thermostat_test::check(id(relay_y1).state && id(relay_ob).state && !id(relay_y2).state, "heat-pump cooling energizes O/B after settling");
       - sensor.template.publish: {id: room_temperature, state: 18.5}
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_off: relay_y1}, timeout: 2s}
-      - lambda: native_test::check(!id(relay_y1).state, "direction change stops physical compressor");
+      - lambda: thermostat_test::check(!id(relay_y1).state, "direction change stops physical compressor");
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 4s}
-      - lambda: native_test::check(id(relay_y1).state && !id(relay_ob).state, "compressor returns in heating after valve and off delays");
+      - lambda: thermostat_test::check(id(relay_y1).state && !id(relay_ob).state, "compressor returns in heating after valve and off delays");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
       # Energized O/B must be retained on Off and on a sensor fault.
@@ -267,18 +265,18 @@ script:
               - switch.is_on: relay_ob
               - lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_COOLING;
           timeout: 5s
-      - lambda: native_test::check(id(relay_y1).state && id(relay_ob).state, "cooling before O/B retention checks");
+      - lambda: thermostat_test::check(id(relay_y1).state && id(relay_ob).state, "cooling before O/B retention checks");
       - sensor.template.publish: {id: room_temperature, state: !lambda return NAN;}
-      - lambda: native_test::check(id(relay_ob).state && !id(relay_y1).state, "fault stops the running compressor and retains O/B");
+      - lambda: thermostat_test::check(id(relay_ob).state && !id(relay_y1).state, "fault stops the running compressor and retains O/B");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
-      - lambda: native_test::check(id(relay_ob).state && !id(relay_y1).state, "Off retains O/B while stopping compressor");
+      - lambda: thermostat_test::check(id(relay_ob).state && !id(relay_y1).state, "Off retains O/B while stopping compressor");
 
       # Turning retention off requests a controlled deenergization, including
       # the pre-change interval after the actual compressor stop.
       - switch.turn_off: retain_valve_on_stop
-      - lambda: native_test::check(id(relay_ob).state, "O/B does not drop immediately after compressor stop");
+      - lambda: thermostat_test::check(id(relay_ob).state, "O/B does not drop immediately after compressor stop");
       - wait_until: {condition: {switch.is_off: relay_ob}, timeout: 2s}
-      - lambda: native_test::check(!id(relay_ob).state && !id(relay_y1).state, "non-retained Off deenergizes O/B after pre-delay");
+      - lambda: thermostat_test::check(!id(relay_ob).state && !id(relay_y1).state, "non-retained Off deenergizes O/B after pre-delay");
 
       # An already-off compressor permits the valve command immediately, but
       # the independent post-change interval must still inhibit startup.
@@ -287,16 +285,16 @@ script:
       - sensor.template.publish: {id: room_temperature, state: 27}
       - climate.control: {id: hvac_climate, mode: COOL}
       - wait_until: {condition: {switch.is_on: relay_ob}, timeout: 3s}
-      - lambda: native_test::check(id(relay_ob).state && !id(relay_y1).state, "post-change delay holds compressor off");
+      - lambda: thermostat_test::check(id(relay_ob).state && !id(relay_y1).state, "post-change delay holds compressor off");
       - delay: 100ms
-      - lambda: native_test::check(!id(relay_y1).state, "post-change delay is not bypassed");
+      - lambda: thermostat_test::check(!id(relay_y1).state, "post-change delay is not bypassed");
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 3s}
-      - lambda: native_test::check(id(relay_y1).state, "compressor starts after post-change delay");
+      - lambda: thermostat_test::check(id(relay_y1).state, "compressor starts after post-change delay");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
       - switch.turn_on: retain_valve_on_stop
-      # A longer pre-delay leaves a genuine pending valve change after the
-      # native thermostat's one-second idle interval has already elapsed.
-      - lambda: native_test::expected_pre_ms = 2000;
+      # A longer pre-delay leaves a pending valve change after the
+      # thermostat's one-second idle interval has already elapsed.
+      - lambda: thermostat_test::expected_pre_ms = 2000;
       - number.set: {id: valve_pre_change_delay, value: 2}
       - script.execute: prepare_equipment_test
       - script.wait: prepare_equipment_test
@@ -307,7 +305,7 @@ script:
               - switch.is_on: relay_y1
               - switch.is_off: relay_ob
           timeout: 4s
-      - lambda: native_test::check(id(relay_y1).state && !id(relay_ob).state, "heating before pre-change cancellation");
+      - lambda: thermostat_test::check(id(relay_y1).state && !id(relay_ob).state, "heating before pre-change cancellation");
 
       # Cancel an in-flight energization during its pre-change interval.
       - sensor.template.publish: {id: room_temperature, state: 27}
@@ -318,20 +316,20 @@ script:
               - switch.is_off: relay_y1
               - lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_COOLING;
           timeout: 2s
-      - lambda: native_test::check(!id(relay_ob).state, "pre-change delay retains old O/B command");
+      - lambda: thermostat_test::check(!id(relay_ob).state, "pre-change delay retains old O/B command");
       - sensor.template.publish: {id: room_temperature, state: !lambda return NAN;}
       - delay: 1200ms
-      - lambda: native_test::check(!id(relay_ob).state && !id(relay_y1).state && !id(change_valve).is_running(), "fault cancels a pending valve command");
+      - lambda: thermostat_test::check(!id(relay_ob).state && !id(relay_y1).state && !id(change_valve).is_running(), "fault cancels a pending valve command");
       - sensor.template.publish: {id: room_temperature, state: 27}
       - climate.control: {id: hvac_climate, mode: COOL}
       - wait_until: {condition: {switch.is_on: relay_ob}, timeout: 4s}
-      - lambda: native_test::check(id(relay_ob).state && !id(relay_y1).state, "new valve command still observes post-delay");
+      - lambda: thermostat_test::check(id(relay_ob).state && !id(relay_y1).state, "new valve command still observes post-delay");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
       - delay: 1200ms
-      - lambda: native_test::check(id(relay_ob).state && !id(relay_y1).state && !id(start_compressor).is_running(), "Off cancels pending post-delay compressor start");
+      - lambda: thermostat_test::check(id(relay_ob).state && !id(relay_y1).state && !id(start_compressor).is_running(), "Off cancels pending post-delay compressor start");
 
       # Zero is a supported setting, independent of the compressor cooldown.
-      - lambda: native_test::expected_pre_ms = native_test::expected_post_ms = 0;
+      - lambda: thermostat_test::expected_pre_ms = thermostat_test::expected_post_ms = 0;
       - number.set: {id: valve_pre_change_delay, value: 0}
       - number.set: {id: valve_post_change_delay, value: 0}
       - script.execute: prepare_equipment_test
@@ -339,24 +337,24 @@ script:
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 3s}
       - lambda: |-
-          native_test::check(id(relay_y1).state && !id(relay_ob).state, "zero-delay valve change permits heating");
-          native_test::check(uint32_t(millis() - native_test::valve_changed) < 500, "zero post-delay does not add a hidden wait");
+          thermostat_test::check(id(relay_y1).state && !id(relay_ob).state, "zero-delay valve change permits heating");
+          thermostat_test::check(uint32_t(millis() - thermostat_test::valve_changed) < 500, "zero post-delay does not add a hidden wait");
       - sensor.template.publish: {id: room_temperature, state: 27}
       - climate.control: {id: hvac_climate, mode: COOL}
       - wait_until: {condition: {switch.is_on: relay_ob}, timeout: 3s}
       - lambda: |-
-          native_test::check(id(relay_ob).state && !id(relay_y1).state, "zero pre-delay still stops compressor before O/B change");
-          native_test::check(!id(valve_pre_change).is_running(), "zero pre-delay is complete; native idle timing can still defer the command");
+          thermostat_test::check(id(relay_ob).state && !id(relay_y1).state, "zero pre-delay still stops compressor before O/B change");
+          thermostat_test::check(!id(valve_pre_change).is_running(), "zero pre-delay is complete; idle timing can still defer the command");
 
       # Retention also applies to the update-shutdown hook, while powered.
       - script.execute: stop_for_update
       - delay: 2200ms
-      - lambda: native_test::check(id(relay_ob).state, "update shutdown retains O/B");
+      - lambda: thermostat_test::check(id(relay_ob).state, "update shutdown retains O/B");
       - lambda: |-
-          native_test::check(id(updating) && !id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state && !id(relay_g).state,
+          thermostat_test::check(id(updating) && !id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state && !id(relay_g).state,
                              "update shutdown overrides demand and cancels delayed starts");
       - lambda: |-
-          std::printf("Native ESPHome thermostat integration passed (%u physical writes checked)\n", native_test::output_writes);
+          std::printf("ESPHome thermostat integration passed (%u physical writes checked)\n", thermostat_test::output_writes);
           std::exit(0);
 number:
   - id: !extend valve_pre_change_delay
@@ -378,32 +376,32 @@ output:
     id: hvac_pin_w
     type: binary
     write_action:
-      - lambda: native_test::record(0, state, id(backup_type).current_option() == "Furnace replacement", millis());
+      - lambda: thermostat_test::record(0, state, id(backup_type).current_option() == "Furnace replacement", millis());
   - platform: template
     id: hvac_pin_y1
     type: binary
     write_action:
-      - lambda: native_test::record(1, state, id(backup_type).current_option() == "Furnace replacement", millis());
+      - lambda: thermostat_test::record(1, state, id(backup_type).current_option() == "Furnace replacement", millis());
   - platform: template
     id: hvac_pin_y2
     type: binary
     write_action:
-      - lambda: native_test::record(2, state, id(backup_type).current_option() == "Furnace replacement", millis());
+      - lambda: thermostat_test::record(2, state, id(backup_type).current_option() == "Furnace replacement", millis());
   - platform: template
     id: hvac_pin_g
     type: binary
     write_action:
-      - lambda: native_test::record(3, state, id(backup_type).current_option() == "Furnace replacement", millis());
+      - lambda: thermostat_test::record(3, state, id(backup_type).current_option() == "Furnace replacement", millis());
   - platform: template
     id: hvac_pin_ob
     type: binary
     write_action:
-      - lambda: native_test::record(4, state, id(backup_type).current_option() == "Furnace replacement", millis());
+      - lambda: thermostat_test::record(4, state, id(backup_type).current_option() == "Furnace replacement", millis());
   - platform: template
     id: hvac_pin_aux
     type: binary
     write_action:
-      - lambda: native_test::record(5, state, id(backup_type).current_option() == "Furnace replacement", millis());
+      - lambda: thermostat_test::record(5, state, id(backup_type).current_option() == "Furnace replacement", millis());
   - platform: template
     id: led_heat
     type: binary

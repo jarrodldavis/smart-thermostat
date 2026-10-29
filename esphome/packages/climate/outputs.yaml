@@ -1,11 +1,10 @@
-# Native stateful switches and scripts. No custom HVAC controller or clock loop.
 substitutions:
   compressor_off_time: 5min
   stage2_off_time: 5min
   source_settle_time: 30s
 
 switch:
-  # Requests are native template switches, internal and never restored.
+  # Requests are internal and reset on boot.
   - platform: template
     id: stage2_requested
     internal: true
@@ -26,8 +25,7 @@ switch:
     internal: true
     optimistic: true
     restore_mode: ALWAYS_OFF
-  # Stateful native wrappers keep GPIO mapping in the hardware package and let
-  # conditions, diagnostics and cooldowns observe actual relay transitions.
+  # Relay state changes drive diagnostics and cooldown timers.
   - platform: output
     id: relay_w
     output: hvac_pin_w
@@ -323,7 +321,7 @@ script:
             - not: {script.is_running: change_valve}
             - not: {script.is_running: backup_settle}
       # Recheck intent after the wait; cancellation and this guard both prevent
-      # an old delayed action from energizing hardware after Off/fault/takeover.
+      # a pending action from energizing hardware after Off/fault/takeover.
       - if:
           condition:
             and:
@@ -412,8 +410,8 @@ script:
             - switch.turn_on: relay_aux
             - script.execute: update_fan
 
-  # Native scripts provide the actual-relay lockouts shared across directions.
-  # Their running state is the condition; there are no custom timestamps.
+  # Cooldowns apply across heating and cooling calls. A running cooldown
+  # script inhibits the corresponding output start.
   - id: compressor_cooldown
     mode: restart
     then:

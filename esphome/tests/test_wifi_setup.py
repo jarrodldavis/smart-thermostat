@@ -1,4 +1,4 @@
-"""Native fallback setup retains password generation during safe-mode recovery."""
+"""Setup-network password generation during safe-mode recovery."""
 from pathlib import Path
 import subprocess
 import sys
@@ -7,7 +7,7 @@ import unittest
 
 
 class WiFiSetupTest(unittest.TestCase):
-    def test_native_ap_and_password_helper_exist_before_safe_mode(self):
+    def test_ap_and_password_helper_exist_before_safe_mode(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temporary:
             temporary = Path(temporary)
@@ -33,7 +33,7 @@ print(CORE.cpp_main_section)
             self.assertLess(main.index('new(setup_credentials)'), recovery,
                             'Safe mode must register the password helper before calling App.setup()')
             self.assertLess(main.index('->set_ap('), recovery,
-                            'Safe mode must retain the native fallback AP')
+                            'Safe mode must retain the fallback AP')
             self.assertIn('wifi_setup_password::WiFiSetupPassword()', main)
 
 

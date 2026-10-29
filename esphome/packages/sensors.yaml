@@ -31,7 +31,7 @@ sensor:
             alpha: 0.1
             send_every: 1
         - offset: !lambda return id(humidity_offset).state;
-        # Native clamp maps NaN to a bound; keep invalid humidity invalid.
+        # The clamp filter maps NaN to a bound; keep invalid humidity invalid.
         - lambda: |-
             return std::isfinite(x) ? std::clamp(x, 0.0f, 100.0f) : NAN;
         - timeout: 60s
@@ -56,7 +56,7 @@ sensor:
     source_id: ${outdoor_sensor_id}
     internal: true
     filters:
-      # The original sensor remains untouched; this control-only copy expires.
+      # Expire the control copy independently of its source sensor.
       - timeout: 15min
   - platform: uptime
     name: Uptime

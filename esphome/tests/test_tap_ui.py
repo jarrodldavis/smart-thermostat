@@ -1,4 +1,4 @@
-"""Validate the expanded native UI: tappable geometry and direct entity wiring."""
+"""Validate touch targets and UI entity bindings."""
 import json
 from pathlib import Path
 import re
@@ -114,7 +114,7 @@ print(json.dumps(config, default=str))
                         key_width = (width - matrix_style['pad_column'] * (len(buttons) - 1)) * button['width'] / units
                         self.assertGreaterEqual(key_width, 55, (page['id'], button['text']))
 
-    def test_wifi_qr_retains_original_size_and_scanning_margin(self):
+    def test_wifi_qr_size_and_scanning_margin(self):
         page = next(p for p in self.lvgl['pages'] if p['id'] == 'wifi_setup_page')
         qr = next(w['qrcode'] for w in page['widgets'] if 'qrcode' in w)
         self.assertEqual(qr['size'], 150)

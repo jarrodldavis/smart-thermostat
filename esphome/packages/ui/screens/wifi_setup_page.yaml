@@ -18,7 +18,6 @@ widgets:
     grid_cell_column_pos: 0
     grid_cell_column_span: 2
     grid_cell_y_align: CENTER
-# Keep the original 150 px QR canvas with its white scanning margin.
 - qrcode:
     id: wifi_setup_qr
     size: 150
@@ -32,7 +31,7 @@ widgets:
     grid_cell_column_pos: 0
     grid_cell_x_align: CENTER
     grid_cell_y_align: CENTER
-# Group labels without introducing a themed panel or resetting inherited text styles.
+# Containers inherit the page text style.
 - container:
     scrollable: false
     grid_cell_row_pos: 1

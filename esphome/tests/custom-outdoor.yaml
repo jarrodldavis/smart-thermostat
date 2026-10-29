@@ -1,4 +1,4 @@
-# Demonstrates an independent local source without a manual freshness hook.
+# Local outdoor sensor input for the control copy sensor.
 substitutions:
   outdoor_sensor_id: local_outdoor_test
 packages:

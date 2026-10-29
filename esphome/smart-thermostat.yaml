@@ -37,8 +37,7 @@ api:
   reboot_timeout: 0s
 wifi:
   reboot_timeout: 0s
-  # The helper assigns a random password before native Wi-Fi setup, including
-  # safe mode. ESPHome manages fallback activation and the captive portal.
+  # Assign the setup-network password before Wi-Fi starts, including in safe mode.
   ap: {}
 captive_portal:
 improv_serial:

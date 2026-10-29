@@ -1,4 +1,4 @@
-"""Native sensor freshness and presence-aware display lifecycle integration."""
+"""Sensor freshness and presence-aware display lifecycle integration."""
 import json
 import math
 from pathlib import Path
@@ -66,7 +66,7 @@ class SensorDisplayTest(unittest.TestCase):
         self.assertNotIn('room_humidity', json.dumps(gate))
         self.assertIn('std::isfinite(id(room_temperature).state)', json.dumps(gate))
 
-    def test_outdoor_copy_subscribes_to_default_or_custom_sources_without_a_hook(self):
+    def test_outdoor_copy_subscribes_to_default_or_custom_sources(self):
         for config, source_id in [(self.config, 'outdoor_temperature'),
                                   (read_config(ROOT / 'tests/custom-outdoor.yaml'), 'local_outdoor_test')]:
             control = next(s for s in config['sensor'] if s.get('id') == 'outdoor_control_temperature')
@@ -80,7 +80,7 @@ class SensorDisplayTest(unittest.TestCase):
             self.assertNotIn('outdoor_sample_received', json.dumps(config))
             self.assertFalse(any(g['id'].startswith('outdoor_') for g in config['globals']))
 
-    def test_native_idle_rechecks_presence_and_drives_backlight_lifecycle(self):
+    def test_idle_rechecks_presence_and_drives_backlight_lifecycle(self):
         ui = self.config['lvgl'][0]
         self.assertNotIn('on_idle', ui, 'Presence must be rechecked after a blocked timeout')
         interval = next(i for i in self.config['interval'] if str(i['interval']) == '1s')
@@ -97,7 +97,7 @@ class SensorDisplayTest(unittest.TestCase):
         self.assertEqual(len(wake['then']), 1)
         self.assertIn('lvgl.resume', wake['then'][0])
         self.assertFalse(any(g['id'] == 'last_interaction' for g in self.config['globals']))
-        # Sleeping touches still wake on release rather than activating widgets.
+        # A waking touch is consumed until release.
         touch = self.config['touchscreen'][0]
         self.assertNotIn('on_touch', touch)
         self.assertEqual(touch['on_release']['then'][0]['script.execute']['id'], 'wake_screen')

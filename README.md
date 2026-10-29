@@ -1,6 +1,6 @@
 # Smart Thermostat
 
-An ESPHome implementation is available alongside the original firmware. See the
+For ESPHome setup and development, see the
 [ESPHome installation, adoption, and commissioning guide](esphome/README.md).
 It supports local touchscreen control, two compressor stages, and configurable
 electric or furnace backup on the V0.7.3 ESP32-S3 prototype.

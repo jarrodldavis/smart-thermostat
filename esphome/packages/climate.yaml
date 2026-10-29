@@ -73,8 +73,8 @@ climate:
     fan_only_action:
       - script.execute: reset_stage_requests
       - script.execute: apply_hvac
-    # Native OR policy: delta exceeded OR maximum primary runtime exceeded.
-    # Repeated heating callbacks advance Y2, then backup. ESPHome owns escalation timing.
+    # Supplemental requests trigger on temperature deficit or primary runtime.
+    # Repeated heating callbacks advance Y2, then backup.
     supplemental_heating_delta: 1.0
     supplemental_cooling_delta: 1.0
     max_heating_run_time: 5min

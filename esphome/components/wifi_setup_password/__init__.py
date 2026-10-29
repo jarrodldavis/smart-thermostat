@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Assign a device-generated password to ESPHome's native fallback AP."""
+"""Assign a device-generated password to ESPHome's fallback AP."""
 from esphome import codegen as cg, config_validation as cv
 from esphome.core import CoroPriority, coroutine_with_priority
 

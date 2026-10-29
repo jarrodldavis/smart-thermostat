@@ -2,11 +2,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
-namespace native_test {
+namespace thermostat_test {
 inline unsigned routing_evaluations{0}, before_wait{0};
 inline void check(bool condition, const char *message) {
   if (!condition) {
-    std::fprintf(stderr, "Native thermostat integration failed: %s\n", message);
+    std::fprintf(stderr, "Thermostat integration failed: %s\n", message);
     std::exit(1);
   }
 }
@@ -42,4 +42,4 @@ inline void record(unsigned pin, bool state, bool furnace, uint32_t now) {
   check(!pins[0] || (!pins[1] && !pins[5]), "W excludes compressor and AUX");
   if (furnace) check(!pins[5] || (!pins[1] && !pins[2]), "furnace excludes both compressor stages");
 }
-}  // namespace native_test
+}  // namespace thermostat_test

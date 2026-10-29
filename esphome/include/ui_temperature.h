@@ -16,9 +16,8 @@ inline float from_display(float value, bool fahrenheit, TemperatureKind kind) {
   return kind == TemperatureKind::ABSOLUTE ? esphome::fahrenheit_to_celsius(value) :
       esphome::fahrenheit_to_celsius(value + esphome::celsius_to_fahrenheit(0.0f));
 }
-// Step from the rounded displayed value, including values received from HA
-// or stored by older firmware. Quantize bounds too, so the 2 C target separation
-// never introduces fractional Fahrenheit setpoints at an adjustment limit.
+// Round the displayed value and bounds to the adjustment step so target
+// separation cannot introduce fractional Fahrenheit setpoints at a limit.
 inline float adjust_display(float c, int direction, bool fahrenheit, TemperatureKind kind,
                             float c_step, float f_step, float minimum_c, float maximum_c) {
   const float step = fahrenheit && kind != TemperatureKind::NONE ? f_step : c_step;

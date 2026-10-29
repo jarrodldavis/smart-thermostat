@@ -1,5 +1,3 @@
-# Native grid layouts and button matrices; all interaction uses taps.
-# Settings includes bind directly to entity IDs at configuration time.
 packages:
   main_screens:
     lvgl:
@@ -84,7 +82,7 @@ lvgl:
 script:
 - id: wake_screen
   then:
-  # Native resume resets LVGL's inactivity counter and redraws the screen.
+  # Resume resets LVGL's inactivity counter and redraws the screen.
   - lvgl.resume: null
 - id: update_backlight
   then:

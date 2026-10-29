@@ -23,7 +23,7 @@ void temperature_units() {
   close(adjust_display(20, 1, false, absolute, 0.5f, 1, 7, 35), 20.5f);
   close(to_display(adjust_display(from_display(74.3f, true, absolute), -1, true,
     absolute, 0.5f, 1, 7, 35), true, absolute), 73);
-  // Target-separation bounds never create 70.4 F instead of a whole number.
+  // Target-separation bounds must align with whole-degree Fahrenheit steps.
   c = adjust_display(from_display(70, true, absolute), 1, true, absolute, 0.5f, 1,
     7, from_display(74, true, absolute) - 2);
   close(to_display(c, true, absolute), 70);

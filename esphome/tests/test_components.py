@@ -1,4 +1,4 @@
-"""Native staging and touchscreen integration contracts."""
+"""Staging and touchscreen integration contracts."""
 from pathlib import Path
 import subprocess
 import sys
@@ -16,8 +16,8 @@ ConfigLoader.add_constructor('!lambda', lambda loader, node: loader.construct_sc
 ConfigLoader.add_constructor('!include', lambda loader, node: loader.construct_scalar(node))
 
 
-class NativeComponentsTest(unittest.TestCase):
-    def test_native_actions_directly_drive_declarative_stage_requests(self):
+class ComponentsTest(unittest.TestCase):
+    def test_thermostat_actions_drive_stage_requests(self):
         config = yaml.load((ROOT / 'packages/climate.yaml').read_text(), Loader=ConfigLoader)
         thermostat = config['climate'][0]
         self.assertIs(thermostat['startup_delay'], True)
@@ -46,13 +46,13 @@ class NativeComponentsTest(unittest.TestCase):
             self.assertEqual(number['on_value'], [
                 {'script.execute': 'equipment_changed'},
                 {'script.execute': 'configure_staging'},
-            ], 'Inhibit relays before changing a running native timer')
+            ], 'Inhibit relays before changing a running thermostat timer')
         self.assertEqual({g['id'] for g in config['globals']},
                          {'commissioned', 'runtime_ready', 'updating'})
         self.assertNotIn('includes', config['esphome'])
         self.assertNotIn('interval', config)
 
-    def test_native_scripts_own_interlocks_and_cancel_pending_starts(self):
+    def test_scripts_enforce_interlocks_and_cancel_pending_starts(self):
         outputs = yaml.load((ROOT / 'packages/climate/outputs.yaml').read_text(), Loader=ConfigLoader)
         scripts = {s['id']: s for s in outputs['script']}
         for script, delay in [('compressor_cooldown', '${compressor_off_time}'),
@@ -77,7 +77,7 @@ class NativeComponentsTest(unittest.TestCase):
             self.assertEqual(pins[relays['relay_' + terminal]['output']], f'GPIO{gpio}')
         self.assertFalse((ROOT / 'include/hvac_controller.h').exists())
 
-    def test_ob_settings_use_independent_native_delays_and_retention(self):
+    def test_ob_settings_use_independent_delays_and_retention(self):
         config = yaml.load((ROOT / 'packages/climate.yaml').read_text(), Loader=ConfigLoader)
         outputs = yaml.load((ROOT / 'packages/climate/outputs.yaml').read_text(), Loader=ConfigLoader)
         scripts = {s['id']: s for s in outputs['script']}
@@ -115,8 +115,7 @@ class NativeComponentsTest(unittest.TestCase):
         self.assertIn('{0xD0, 0x00, 0x00}', command)
         self.assertLess(command.index('.enable()'), command.index('.transfer_array('))
         self.assertLess(command.index('.transfer_array('), command.index('.disable()'))
-        # Appending the early transaction must not replace or move the original
-        # late boot hooks, which need LVGL and restored equipment controls ready.
+        # UI and equipment boot hooks need LVGL and restored controls ready.
         late = [h for h in hooks if h['priority'] == -100]
         actions = [a for hook in late for a in hook['then']]
         scripts = {a['script.execute']['id'] for a in actions if 'script.execute' in a}
