@@ -55,12 +55,17 @@ climate:
       max_temperature: 35
       temperature_step: 0.5
     default_preset: Home
-    on_boot_restore_from: memory
+    on_boot_restore_from: default_preset
     preset:
       - name: Home
         default_target_temperature_low: 20
         default_target_temperature_high: 24
-        mode: 'OFF'
+      - name: Emergency heat
+        default_target_temperature_low: 20
+        default_target_temperature_high: 24
+        mode: HEAT
+    preset_change:
+      - script.execute: reset_stage_requests
     heat_action:
       - script.execute: reset_stage_requests
       - script.execute: apply_hvac
@@ -110,6 +115,27 @@ climate:
       - switch.turn_off: continuous_fan_requested
       - script.execute: apply_hvac
     on_state:
+      - if:
+          condition:
+            lambda: return id(runtime_ready) && id(hvac_climate).get_custom_preset() == "Emergency heat";
+          then:
+            - if:
+                condition:
+                  and:
+                    - select.is: {id: equipment, options: ['Heat pump']}
+                    - not:
+                        select.is: {id: backup_type, options: ['None']}
+                then:
+                  - if:
+                      condition:
+                        lambda: return id(hvac_climate).mode != climate::CLIMATE_MODE_HEAT;
+                      then:
+                        - climate.control:
+                            id: hvac_climate
+                            preset: HOME
+                            mode: !lambda return id(hvac_climate).mode;
+                else:
+                  - climate.control: {id: hvac_climate, preset: HOME, mode: 'OFF'}
       - script.execute: apply_hvac
 
 select:
@@ -349,23 +375,6 @@ switch:
     on_turn_off:
       - script.execute: equipment_changed
   - platform: template
-    id: emergency_heat
-    name: Emergency heat
-    restore_mode: ALWAYS_OFF
-    turn_on_action:
-      - if:
-          condition:
-            and:
-              - select.is: {id: equipment, options: ['Heat pump']}
-              - not:
-                  select.is: {id: backup_type, options: ['None']}
-          then:
-            - switch.template.publish: {id: emergency_heat, state: 'ON'}
-            - script.execute: apply_hvac
-    turn_off_action:
-      - switch.template.publish: {id: emergency_heat, state: 'OFF'}
-      - script.execute: apply_hvac
-  - platform: template
     id: beep_enabled
     name: Touch beep
     entity_category: config
@@ -420,7 +429,6 @@ script:
             lambda: return id(runtime_ready);
           then:
             - globals.set: {id: commissioned, value: 'false'}
-            - switch.turn_off: emergency_heat
             - script.execute: reset_stage_requests
             - climate.control:
                 id: hvac_climate

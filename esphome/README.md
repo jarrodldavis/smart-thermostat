@@ -97,8 +97,14 @@ During a heating call, supplemental requests advance a two-stage heat pump to
 Y2, then to backup when automatic backup is enabled. A single-stage heat pump
 selects backup on the first request. During cooling, supplemental requests select
 Y2. Staging resets when the call ends. Electric backup supplements compressor
-heating; furnace backup runs with the compressor off. For emergency heat, enable
-the Emergency heat switch and select Heat mode.
+heating; furnace backup runs with the compressor off. Select **Emergency Heat**
+on the operating-mode screen or the **Emergency heat**
+climate preset in Home Assistant to use backup exclusively. The preset starts
+with a 20°C/68°F heating target; adjust it as needed. Select **Home** to resume
+normal heating, or choose another operating mode on the touchscreen.
+Each restart applies the Home preset with 20°C/68°F and 24°C/75.2°F targets and
+starts in Off mode. Equipment changes also clear emergency heat. Selecting the
+preset without a configured heat pump and backup leaves the thermostat Off.
 
 Temperature failure, explicit Off, and update shutdown stop HVAC outputs even
 within minimum run times. A failed OTA attempt leaves outputs inhibited until

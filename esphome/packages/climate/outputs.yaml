@@ -113,7 +113,11 @@ script:
                       - or:
                           - select.is: {id: backup_policy, options: ['Local demand', 'Either']}
                           - not: &outdoor_available
-                              lambda: return id(balance_confirmed).state && std::isfinite(id(balance_point).state) && std::isfinite(id(outdoor_control_temperature).state);
+                              and:
+                                - switch.is_on: balance_confirmed
+                                - lambda: |-
+                                    return std::isfinite(id(balance_point).state) &&
+                                      std::isfinite(id(outdoor_control_temperature).state);
                   - and:
                       - select.is: {id: backup_policy, options: ['Outdoor temperature', 'Either']}
                       - *outdoor_available
@@ -127,8 +131,18 @@ script:
     mode: restart
     then:
       - if:
-          condition: &enabled
-            lambda: return id(runtime_ready) && id(commissioned) && !id(updating) && std::isfinite(id(room_temperature).state) && id(hvac_climate).mode != climate::CLIMATE_MODE_OFF;
+          condition: &operation_allowed
+            and:
+              - lambda: |-
+                  return id(runtime_ready) && id(commissioned) && !id(updating) &&
+                    std::isfinite(id(room_temperature).state) && id(hvac_climate).mode != climate::CLIMATE_MODE_OFF;
+              - or:
+                  - not: &emergency_heat
+                      lambda: return id(hvac_climate).get_custom_preset() == "Emergency heat";
+                  - and:
+                      - *heat_pump
+                      - not:
+                          select.is: {id: backup_type, options: ['None']}
           then:
             - script.execute: choose_backup
             - if:
@@ -143,7 +157,7 @@ script:
                                 - not:
                                     select.is: {id: backup_type, options: ['None']}
                                 - or:
-                                    - switch.is_on: emergency_heat
+                                    - *emergency_heat
                                     - and:
                                         - switch.is_on: backup_selected
                                         - select.is: {id: backup_type, options: ['Furnace replacement']}
@@ -181,7 +195,7 @@ script:
                         and:
                           - &cooling
                             lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_COOLING;
-                          - switch.is_off: emergency_heat
+                          - not: *emergency_heat
                       then:
                         - script.execute: request_compressor
                       else:
@@ -293,7 +307,7 @@ script:
               - switch.is_off: relay_y2
               - or:
                   - and:
-                      - *enabled
+                      - *operation_allowed
                       - *heat_pump
                       - or:
                           - and:
@@ -303,7 +317,7 @@ script:
                               - lambda: return !energize;
                               - not: *valve_energized
                   - and:
-                      - not: *enabled
+                      - not: *operation_allowed
                       - switch.is_off: retain_valve_on_stop
                       - lambda: return !energize;
           then:
@@ -325,11 +339,11 @@ script:
       - if:
           condition:
             and:
-              - *enabled
+              - *operation_allowed
               - or:
                   - and:
                       - *cooling
-                      - switch.is_off: emergency_heat
+                      - not: *emergency_heat
                   - and:
                       - *heating
                       - *heat_pump
@@ -344,11 +358,11 @@ script:
       - if:
           condition:
             and:
-              - *enabled
+              - *operation_allowed
               - switch.is_on: relay_y1
               - switch.is_on: stage2_requested
               - select.is: {id: compressor_stages, options: ['2']}
-              - switch.is_off: emergency_heat
+              - not: *emergency_heat
           then:
             - if:
                 condition:
@@ -363,13 +377,13 @@ script:
       - if:
           condition:
             and:
-              - *enabled
+              - *operation_allowed
               - *heating
               - *heat_pump
               - switch.is_on: relay_y1
               - switch.is_on: backup_selected
               - select.is: {id: backup_type, options: ['Electric supplemental']}
-              - switch.is_off: emergency_heat
+              - not: *emergency_heat
           then:
             - switch.turn_on: relay_aux
           else:
@@ -383,11 +397,11 @@ script:
       - if:
           condition:
             and:
-              - *enabled
+              - *operation_allowed
               - switch.is_on: relay_y1
               - switch.is_on: stage2_requested
               - select.is: {id: compressor_stages, options: ['2']}
-              - switch.is_off: emergency_heat
+              - not: *emergency_heat
           then:
             - switch.turn_on: relay_y2
 
@@ -400,7 +414,7 @@ script:
       - if:
           condition:
             and:
-              - *enabled
+              - *operation_allowed
               - *heating
               - *heat_pump
               - *replacement_heat
@@ -438,7 +452,7 @@ script:
       - if:
           condition:
             and:
-              - *enabled
+              - *operation_allowed
               - or:
                   - switch.is_on: continuous_fan_requested
                   - lambda: return id(hvac_climate).action == climate::CLIMATE_ACTION_FAN;

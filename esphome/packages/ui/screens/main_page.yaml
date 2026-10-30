@@ -200,6 +200,7 @@ script:
     - lvgl.label.update:
         id: mode_label
         text: !lambda |-
+          if (id(hvac_climate).get_custom_preset() == "Emergency heat") return std::string("Mode: Emergency Heat");
           switch (id(hvac_climate).mode) {
            case climate::CLIMATE_MODE_HEAT: return std::string("Mode: Heat");
            case climate::CLIMATE_MODE_COOL: return std::string("Mode: Cool");

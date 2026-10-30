@@ -4,7 +4,7 @@ packages:
     vars:
       entity: backup_type
       title: Backup type
-      previous: emergency_heat_page
+      previous: outdoor_units_page
       next: auto_backup_page
       option0: None
       option1: Electric supplemental
@@ -50,22 +50,6 @@ packages:
       entity: outdoor_units
       title: Outdoor sensor units
       previous: balance_confirmed_page
-      next: emergency_heat_page
+      next: backup_type_page
       option0: Celsius
       option1: Fahrenheit
-  emergency_heat: !include
-    file: ../toggle.yaml
-    vars:
-      entity: emergency_heat
-      title: Emergency heat
-      previous: outdoor_units_page
-      next: backup_type_page
-
-script:
-  - id: !extend refresh_ui
-    then:
-    - lvgl.widget.update:
-        id: emergency_heat_on
-        state:
-          disabled: !lambda |-
-            return id(equipment).current_option() != "Heat pump" || id(backup_type).current_option() == "None";

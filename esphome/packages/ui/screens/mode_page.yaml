@@ -43,9 +43,13 @@ lvgl:
                 no_repeat: true
                 checkable: true
               on_click:
-              - climate.control:
-                  id: hvac_climate
-                  mode: HEAT
+              - if:
+                  condition:
+                    lambda: return id(hvac_climate).get_custom_preset() == "Emergency heat";
+                  then:
+                    - climate.control: {id: hvac_climate, preset: HOME, mode: HEAT}
+                  else:
+                    - climate.control: {id: hvac_climate, mode: HEAT}
               - lvgl.page.show: main_page
               - script.execute: ui_beep
               id: mode_heat
@@ -84,6 +88,17 @@ lvgl:
               - lvgl.page.show: main_page
               - script.execute: ui_beep
               id: mode_fan_only
+            - text: Emergency Heat
+              control:
+                no_repeat: true
+                checkable: true
+              on_click:
+              - climate.control:
+                  id: hvac_climate
+                  custom_preset: Emergency heat
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+              id: mode_emergency_heat
           one_checked: true
           grid_cell_row_pos: 1
           grid_cell_column_pos: 0
@@ -112,7 +127,7 @@ script:
         id: mode_heat
         state:
           checked: !lambda |-
-            return id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT;
+            return id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT && id(hvac_climate).get_custom_preset() != "Emergency heat";
     - lvgl.widget.update:
         id: mode_cool
         state:
@@ -128,3 +143,8 @@ script:
         state:
           checked: !lambda |-
             return id(hvac_climate).mode == climate::CLIMATE_MODE_FAN_ONLY;
+    - lvgl.widget.update:
+        id: mode_emergency_heat
+        state:
+          checked: !lambda return id(hvac_climate).get_custom_preset() == "Emergency heat";
+          disabled: !lambda return id(equipment).current_option() != "Heat pump" || id(backup_type).current_option() == "None";

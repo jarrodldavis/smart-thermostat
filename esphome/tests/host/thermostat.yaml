@@ -16,6 +16,9 @@ esphome:
   on_boot:
     - priority: -200
       then:
+        - lambda: |-
+            thermostat_test::check(id(hvac_climate).preset == climate::CLIMATE_PRESET_HOME && id(hvac_climate).mode == climate::CLIMATE_MODE_OFF, "startup applies the Home preset in Off mode");
+            thermostat_test::check(id(hvac_climate).target_temperature_low == 20 && id(hvac_climate).target_temperature_high == 24, "startup uses Home target temperatures");
         - switch.turn_on: auto_backup
         - lambda: |-
             id(commissioned) = true;
@@ -132,6 +135,10 @@ script:
           id(room_humidity).publish_state(41);
           thermostat_test::check(thermostat_test::falling_edges[0] == w_stops, "sensor updates must not pulse conventional W");
           thermostat_test::check(thermostat_test::falling_edges[3] == fan_stops, "sensor updates must not pulse thermostat-owned heating fan");
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
+      - lambda: |-
+          thermostat_test::check(id(hvac_climate).get_custom_preset() != "Emergency heat", "conventional equipment rejects emergency preset");
+          thermostat_test::check(id(hvac_climate).mode == climate::CLIMATE_MODE_OFF && !id(relay_w).state && !id(relay_aux).state && !id(relay_y1).state, "unsupported preset leaves conventional equipment Off");
       - sensor.template.publish: {id: room_temperature, state: 20.5}
       - wait_until: {condition: {switch.is_off: relay_w}, timeout: 3s}
       - lambda: thermostat_test::check(!id(relay_w).state, "thermostat ends the heating call");
@@ -163,16 +170,18 @@ script:
       - script.wait: prepare_equipment_test
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_y2}, timeout: 3s}
-      - switch.turn_on: emergency_heat
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
       - delay: 100ms
       - lambda: thermostat_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "furnace emergency transition is all off");
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 2s}
-      - lambda: thermostat_test::check(id(relay_aux).state, "emergency backup starts after script delay");
-      - switch.turn_off: emergency_heat
+      - lambda: |-
+          thermostat_test::check(id(relay_aux).state, "emergency backup starts after script delay");
+          thermostat_test::check(id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT && id(hvac_climate).get_custom_preset() == "Emergency heat", "emergency preset selects Heat mode");
+      - climate.control: {id: hvac_climate, preset: HOME}
       - lambda: thermostat_test::check(!id(relay_aux).state && !id(relay_y1).state, "backup stops before compressor return");
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 4s}
       - lambda: thermostat_test::check(id(relay_y1).state && !id(relay_aux).state, "compressor returns through cooldown waits");
-      - switch.turn_on: emergency_heat
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
       - delay: 100ms
       - sensor.template.publish: {id: room_temperature, state: !lambda return NAN;}
       - delay: 1200ms
@@ -180,6 +189,13 @@ script:
           thermostat_test::check(!id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "fault cancels pending furnace start");
           thermostat_test::check(!id(start_backup).is_running() && !id(start_compressor).is_running(), "fault cancels delayed scripts");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
+
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
+      - number.set: {id: stage_delta, value: 2}
+      - lambda: |-
+          thermostat_test::check(!id(commissioned) && id(hvac_climate).mode == climate::CLIMATE_MODE_OFF && id(hvac_climate).get_custom_preset() != "Emergency heat", "equipment changes exit emergency heat and require commissioning");
+          thermostat_test::check(!id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "equipment changes inhibit all heat sources");
+      - number.set: {id: stage_delta, value: 1}
 
       # Outdoor selection, latch, and stale-data fallback to callbacks.
       - select.set: {id: backup_policy, option: Outdoor temperature}
@@ -217,8 +233,17 @@ script:
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 3s}
       - lambda: thermostat_test::check(id(relay_aux).state && id(relay_y1).state && !id(relay_y2).state, "single-stage electric backup on first callback");
-      - switch.turn_on: emergency_heat
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
       - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "electric emergency heat uses AUX exclusively");
+      - climate.control: {id: hvac_climate, mode: 'OFF'}
+      - lambda: thermostat_test::check(id(hvac_climate).get_custom_preset() != "Emergency heat", "Off clears emergency preset");
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
+      - wait_until: {condition: {switch.is_on: relay_aux}, timeout: 4s}
+      - lambda: thermostat_test::check(id(relay_aux).state && !id(relay_y1).state && !id(relay_y2).state, "preset selected from Off heats with backup exclusively");
+      - climate.control: {id: hvac_climate, target_temperature_low: 21}
+      - lambda: thermostat_test::check(id(hvac_climate).get_custom_preset() == "Emergency heat" && id(hvac_climate).target_temperature_low == 21, "emergency target remains adjustable");
+      - climate.control: {id: hvac_climate, mode: COOL}
+      - lambda: thermostat_test::check(id(hvac_climate).get_custom_preset() != "Emergency heat" && !id(relay_aux).state, "cooling mode exits emergency heat");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
 
       - select.set: {id: backup_type, option: Furnace replacement}
@@ -236,10 +261,10 @@ script:
       - climate.control: {id: hvac_climate, mode: HEAT}
       - wait_until: {condition: {switch.is_on: relay_y1}, timeout: 3s}
       - delay: 1100ms
-      - switch.turn_on: emergency_heat
+      - climate.control: {id: hvac_climate, custom_preset: Emergency heat}
       - lambda: |-
-          thermostat_test::check(id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "no-backup single-stage equipment");
-          thermostat_test::check(!id(emergency_heat).state, "unsupported emergency heat cannot activate");
+          thermostat_test::check(id(hvac_climate).mode == climate::CLIMATE_MODE_OFF && !id(relay_y1).state && !id(relay_y2).state && !id(relay_aux).state, "unsupported emergency request leaves no-backup equipment Off");
+          thermostat_test::check(id(hvac_climate).get_custom_preset() != "Emergency heat", "unsupported emergency heat cannot activate");
       - climate.control: {id: hvac_climate, mode: 'OFF'}
       # Heat/cool reversals must settle O/B and share the physical compressor
       # off timer even though the heat and cool timers are independent.

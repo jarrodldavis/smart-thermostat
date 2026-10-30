@@ -136,7 +136,7 @@ print(json.dumps(config, default=str))
         for entity in ('temperature_offset', 'humidity_offset', 'stage_delta', 'stage_delay',
                        'valve_pre_change_delay', 'valve_post_change_delay', 'retain_valve_on_stop',
                        'balance_point', 'sleep_seconds',
-                       'auto_backup', 'balance_confirmed', 'emergency_heat', 'beep_enabled', 'auto_brightness'):
+                       'auto_backup', 'balance_confirmed', 'beep_enabled', 'auto_brightness'):
             self.assertIn(entity + '_page', pages)
 
 
