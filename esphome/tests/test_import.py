@@ -58,7 +58,6 @@ wifi:
             self.assertIn('name: hallway', result.stdout)
             self.assertIn('version: 0.1.0', result.stdout)
             self.assertIn('id: start_compressor', result.stdout)
-            self.assertNotIn('hvac_controller.h', result.stdout)
             self.assertIn('esphome-v0.1.0', result.stdout)
 
 

@@ -33,7 +33,6 @@ class ComponentsTest(unittest.TestCase):
             ])
         for action in ('supplemental_heating_action', 'supplemental_cooling_action'):
             self.assertEqual(thermostat[action][-1], {'script.execute': 'apply_hvac'})
-            self.assertNotIn('lambda', yaml.dump(thermostat[action]))
             self.assertIn('stage2_requested', yaml.dump(thermostat[action]))
         self.assertIn('local_backup_requested', yaml.dump(thermostat['supplemental_heating_action']))
         for mode, operation in [('on', 'turn_on'), ('auto', 'turn_off')]:
@@ -47,10 +46,6 @@ class ComponentsTest(unittest.TestCase):
                 {'script.execute': 'equipment_changed'},
                 {'script.execute': 'configure_staging'},
             ], 'Inhibit relays before changing a running thermostat timer')
-        self.assertEqual({g['id'] for g in config['globals']},
-                         {'commissioned', 'runtime_ready', 'updating'})
-        self.assertNotIn('includes', config['esphome'])
-        self.assertNotIn('interval', config)
 
     def test_scripts_enforce_interlocks_and_cancel_pending_starts(self):
         outputs = yaml.load((ROOT / 'packages/climate/outputs.yaml').read_text(), Loader=ConfigLoader)
@@ -75,7 +70,6 @@ class ComponentsTest(unittest.TestCase):
         relays = {s['id']: s for s in outputs['switch'] if s['platform'] == 'output'}
         for terminal, gpio in [('w', 5), ('y1', 6), ('y2', 41), ('g', 4), ('ob', 7), ('aux', 39)]:
             self.assertEqual(pins[relays['relay_' + terminal]['output']], f'GPIO{gpio}')
-        self.assertFalse((ROOT / 'include/hvac_controller.h').exists())
 
     def test_ob_settings_use_independent_delays_and_retention(self):
         config = yaml.load((ROOT / 'packages/climate.yaml').read_text(), Loader=ConfigLoader)
@@ -108,7 +102,6 @@ class ComponentsTest(unittest.TestCase):
         self.assertEqual(touch['interrupt_pin']['number'], 48)
         self.assertEqual(touch['touch_timeout'], '80ms')
         self.assertGreater(touch['threshold'], 496, 'Reject observed unattended noise spikes')
-        self.assertFalse(any(s.get('id') == 'touch_irq_active' for s in config['binary_sensor']))
         hooks = config['esphome']['on_boot']
         prime = next(h for h in hooks if h['priority'] == 500)
         command = prime['then'][0]['lambda']

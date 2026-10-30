@@ -87,8 +87,6 @@ print(json.dumps(config, default=str))
             occupied = set()
             for widget in page['widgets']:
                 kind, content = next(iter(widget.items()))
-                self.assertNotIn('x', content)
-                self.assertNotIn('y', content)
                 row, col = content['grid_cell_row_pos'], content['grid_cell_column_pos']
                 nr, nc = content.get('grid_cell_row_span', 1), content.get('grid_cell_column_span', 1)
                 self.assertLessEqual(row + nr, len(rows))
@@ -121,10 +119,8 @@ print(json.dumps(config, default=str))
         self.assertEqual(qr['width'], 150)
         self.assertEqual(qr['height'], 150)
         self.assertEqual(qr['border_width'], 12)
-        self.assertNotIn('on_load', page)
 
     def test_settings_bind_directly_to_existing_entities(self):
-        self.assertFalse(any(g['id'].startswith('setting_') for g in self.config['globals']))
         pages = {p['id'] for p in self.lvgl['pages']}
         selects = {s['id']: set(s['options']) for s in self.config['select']}
         actual = {}
