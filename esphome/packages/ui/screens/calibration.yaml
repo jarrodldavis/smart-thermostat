@@ -1,17 +1,20 @@
-lvgl:
-  pages:
-  - !include
+packages:
+  temperature_offset: !include
     file: ../number.yaml
     vars:
+      unit: "C"
+      decimals: 1
       kind: DIFFERENCE
       f_step: 0.1
       entity: temperature_offset
       title: Temperature offset
       previous: humidity_offset_page
       next: humidity_offset_page
-  - !include
+  humidity_offset: !include
     file: ../number.yaml
     vars:
+      unit: "%"
+      decimals: 1
       kind: NONE
       f_step: 1.0
       entity: humidity_offset

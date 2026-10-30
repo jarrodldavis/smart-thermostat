@@ -1,81 +1,91 @@
-id: settings_menu
-styles: screen
-scrollable: false
-layout:
-  type: GRID
-  grid_rows:
-  - 40
-  - FR(1)
-  - 24
-  grid_columns:
-  - FR(1)
-  grid_cell_x_align: STRETCH
-  grid_cell_y_align: STRETCH
-  pad_row: 6
-  pad_column: 6
-widgets:
-- buttonmatrix:
-    scrollable: false
-    rows:
-    - buttons:
-      - text: Back
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
-    grid_cell_row_pos: 0
-    grid_cell_column_pos: 0
-- buttonmatrix:
-    scrollable: false
-    rows:
-    - buttons:
-      - text: Equipment
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: equipment_page
-        - script.execute: ui_beep
-      - text: Backup heat
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: backup_type_page
-        - script.execute: ui_beep
-    - buttons:
-      - text: Staging
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: stage_delta_page
-        - script.execute: ui_beep
-      - text: Display
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: display_units_page
-        - script.execute: ui_beep
-    - buttons:
-      - text: Calibration
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: temperature_offset_page
-        - script.execute: ui_beep
-      - text: Confirm setup
-        control:
-          no_repeat: true
-        on_click:
-        - button.press: commission_button
-        - script.execute: refresh_ui
-        - script.execute: ui_beep
-    grid_cell_row_pos: 1
-    grid_cell_column_pos: 0
-- label:
-    text: Equipment setup required
-    long_mode: wrap
-    styles: centered_text
-    id: commission_label
-    grid_cell_row_pos: 2
-    grid_cell_column_pos: 0
-    grid_cell_y_align: CENTER
+lvgl:
+  pages:
+    - id: settings_menu
+      styles: screen
+      scrollable: false
+      layout:
+        type: GRID
+        grid_rows:
+        - 40
+        - FR(1)
+        - 24
+        grid_columns:
+        - FR(1)
+        grid_cell_x_align: STRETCH
+        grid_cell_y_align: STRETCH
+        pad_row: 6
+        pad_column: 6
+      widgets:
+      - buttonmatrix:
+          scrollable: false
+          rows:
+          - buttons:
+            - text: Back
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+          grid_cell_row_pos: 0
+          grid_cell_column_pos: 0
+      - buttonmatrix:
+          scrollable: false
+          rows:
+          - buttons:
+            - text: Equipment
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: equipment_page
+              - script.execute: ui_beep
+            - text: Backup heat
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: backup_type_page
+              - script.execute: ui_beep
+          - buttons:
+            - text: Staging
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: stage_delta_page
+              - script.execute: ui_beep
+            - text: Display
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: display_units_page
+              - script.execute: ui_beep
+          - buttons:
+            - text: Calibration
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: temperature_offset_page
+              - script.execute: ui_beep
+            - text: Confirm setup
+              control:
+                no_repeat: true
+              on_click:
+              - button.press: commission_button
+              - script.execute: refresh_ui
+              - script.execute: ui_beep
+          grid_cell_row_pos: 1
+          grid_cell_column_pos: 0
+      - label:
+          text: Equipment setup required
+          long_mode: wrap
+          styles: centered_text
+          id: commission_label
+          grid_cell_row_pos: 2
+          grid_cell_column_pos: 0
+          grid_cell_y_align: CENTER
+
+script:
+  - id: !extend refresh_ui
+    then:
+    - lvgl.label.update:
+        id: commission_label
+        text: !lambda |-
+          return std::string(id(commissioned) ? "Equipment setup confirmed" : "Confirm setup after equipment changes");

@@ -1,40 +1,54 @@
-id: diagnostics_page
-styles: screen
-scrollable: false
-layout:
-  type: GRID
-  grid_rows:
-  - 40
-  - FR(1)
-  grid_columns:
-  - FR(1)
-  grid_cell_x_align: STRETCH
-  grid_cell_y_align: STRETCH
-  pad_row: 6
-  pad_column: 6
-widgets:
-- buttonmatrix:
-    scrollable: false
-    rows:
-    - buttons:
-      - text: Back
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
-      - text: Wi-Fi setup
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: wifi_setup_page
-        - script.execute: ui_beep
-    grid_cell_row_pos: 0
-    grid_cell_column_pos: 0
-- label:
-    text: Starting
-    long_mode: wrap
-    id: diagnostics_label
-    grid_cell_row_pos: 1
-    grid_cell_column_pos: 0
-    grid_cell_y_align: CENTER
+lvgl:
+  pages:
+    - id: diagnostics_page
+      styles: screen
+      scrollable: false
+      layout:
+        type: GRID
+        grid_rows:
+        - 40
+        - FR(1)
+        grid_columns:
+        - FR(1)
+        grid_cell_x_align: STRETCH
+        grid_cell_y_align: STRETCH
+        pad_row: 6
+        pad_column: 6
+      widgets:
+      - buttonmatrix:
+          scrollable: false
+          rows:
+          - buttons:
+            - text: Back
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+            - text: Wi-Fi setup
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: wifi_setup_page
+              - script.execute: ui_beep
+          grid_cell_row_pos: 0
+          grid_cell_column_pos: 0
+      - label:
+          text: Starting
+          long_mode: wrap
+          id: diagnostics_label
+          grid_cell_row_pos: 1
+          grid_cell_column_pos: 0
+          grid_cell_y_align: CENTER
+
+script:
+  - id: !extend refresh_ui
+    then:
+    - lvgl.label.update:
+        id: diagnostics_label
+        text: !lambda |-
+          return str_sprintf("IP: %s\nWi-Fi: %s | HA: %s\nCommissioned: %s\nTemperature: %s\nOutdoor fallback: %s\nSource: %s\nCompressor stage: %d",
+            id(device_ip).state.c_str(), wifi::global_wifi_component->is_connected() ? "online" : "offline",
+            api::global_api_server->is_connected() ? "connected" : "offline",
+            id(commissioned) ? "yes" : "no", id(temperature_fault).state ? "FAULT" : "OK",
+            id(outdoor_policy_fallback).state ? "yes" : "no", id(heat_source).state.c_str(), (id(relay_y2).state ? 2 : id(relay_y1).state ? 1 : 0));

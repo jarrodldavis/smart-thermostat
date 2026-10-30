@@ -1,6 +1,5 @@
-lvgl:
-  pages:
-  - !include
+packages:
+  display_units: !include
     file: ../choice_2.yaml
     vars:
       entity: display_units
@@ -9,23 +8,25 @@ lvgl:
       next: sleep_seconds_page
       option0: Celsius
       option1: Fahrenheit
-  - !include
+  sleep_seconds: !include
     file: ../number.yaml
     vars:
+      unit: "s"
+      decimals: 1
       kind: NONE
       f_step: 1.0
       entity: sleep_seconds
       title: Display timeout
       previous: display_units_page
       next: auto_brightness_page
-  - !include
+  auto_brightness: !include
     file: ../toggle.yaml
     vars:
       entity: auto_brightness
       title: Automatic brightness
       previous: sleep_seconds_page
       next: beep_enabled_page
-  - !include
+  beep_enabled: !include
     file: ../toggle.yaml
     vars:
       entity: beep_enabled

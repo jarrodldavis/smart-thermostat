@@ -1,99 +1,130 @@
-id: mode_page
-styles: screen
-scrollable: false
-layout:
-  type: GRID
-  grid_rows:
-  - 40
-  - FR(1)
-  - 40
-  grid_columns:
-  - FR(1)
-  grid_cell_x_align: STRETCH
-  grid_cell_y_align: STRETCH
-  pad_row: 6
-  pad_column: 6
-widgets:
-- label:
-    text: Operating mode
-    long_mode: wrap
-    styles: large_text
-    grid_cell_row_pos: 0
-    grid_cell_column_pos: 0
-    grid_cell_y_align: CENTER
-- buttonmatrix:
-    scrollable: false
-    rows:
-    - buttons:
-      - text: 'Off'
-        control:
-          no_repeat: true
-          checkable: true
-        on_click:
-        - climate.control:
-            id: hvac_climate
-            mode: 'OFF'
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
+lvgl:
+  pages:
+    - id: mode_page
+      styles: screen
+      scrollable: false
+      layout:
+        type: GRID
+        grid_rows:
+        - 40
+        - FR(1)
+        - 40
+        grid_columns:
+        - FR(1)
+        grid_cell_x_align: STRETCH
+        grid_cell_y_align: STRETCH
+        pad_row: 6
+        pad_column: 6
+      widgets:
+      - label:
+          text: Operating mode
+          long_mode: wrap
+          styles: large_text
+          grid_cell_row_pos: 0
+          grid_cell_column_pos: 0
+          grid_cell_y_align: CENTER
+      - buttonmatrix:
+          scrollable: false
+          rows:
+          - buttons:
+            - text: 'Off'
+              control:
+                no_repeat: true
+                checkable: true
+              on_click:
+              - climate.control:
+                  id: hvac_climate
+                  mode: 'OFF'
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+              id: mode_off
+            - text: Heat
+              control:
+                no_repeat: true
+                checkable: true
+              on_click:
+              - climate.control:
+                  id: hvac_climate
+                  mode: HEAT
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+              id: mode_heat
+          - buttons:
+            - text: Cool
+              control:
+                no_repeat: true
+                checkable: true
+              on_click:
+              - climate.control:
+                  id: hvac_climate
+                  mode: COOL
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+              id: mode_cool
+            - text: Heat/Cool
+              control:
+                no_repeat: true
+                checkable: true
+              on_click:
+              - climate.control:
+                  id: hvac_climate
+                  mode: HEAT_COOL
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+              id: mode_heat_cool
+          - buttons:
+            - text: Fan only
+              control:
+                no_repeat: true
+                checkable: true
+              on_click:
+              - climate.control:
+                  id: hvac_climate
+                  mode: FAN_ONLY
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+              id: mode_fan_only
+          one_checked: true
+          grid_cell_row_pos: 1
+          grid_cell_column_pos: 0
+      - buttonmatrix:
+          scrollable: false
+          rows:
+          - buttons:
+            - text: Back
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: main_page
+              - script.execute: ui_beep
+          grid_cell_row_pos: 2
+          grid_cell_column_pos: 0
+
+script:
+  - id: !extend refresh_ui
+    then:
+    - lvgl.widget.update:
         id: mode_off
-      - text: Heat
-        control:
-          no_repeat: true
-          checkable: true
-        on_click:
-        - climate.control:
-            id: hvac_climate
-            mode: HEAT
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
+        state:
+          checked: !lambda |-
+            return id(hvac_climate).mode == climate::CLIMATE_MODE_OFF;
+    - lvgl.widget.update:
         id: mode_heat
-    - buttons:
-      - text: Cool
-        control:
-          no_repeat: true
-          checkable: true
-        on_click:
-        - climate.control:
-            id: hvac_climate
-            mode: COOL
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
+        state:
+          checked: !lambda |-
+            return id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT;
+    - lvgl.widget.update:
         id: mode_cool
-      - text: Heat/Cool
-        control:
-          no_repeat: true
-          checkable: true
-        on_click:
-        - climate.control:
-            id: hvac_climate
-            mode: HEAT_COOL
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
+        state:
+          checked: !lambda |-
+            return id(hvac_climate).mode == climate::CLIMATE_MODE_COOL;
+    - lvgl.widget.update:
         id: mode_heat_cool
-    - buttons:
-      - text: Fan only
-        control:
-          no_repeat: true
-          checkable: true
-        on_click:
-        - climate.control:
-            id: hvac_climate
-            mode: FAN_ONLY
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
+        state:
+          checked: !lambda |-
+            return id(hvac_climate).mode == climate::CLIMATE_MODE_HEAT_COOL;
+    - lvgl.widget.update:
         id: mode_fan_only
-    one_checked: true
-    grid_cell_row_pos: 1
-    grid_cell_column_pos: 0
-- buttonmatrix:
-    scrollable: false
-    rows:
-    - buttons:
-      - text: Back
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: main_page
-        - script.execute: ui_beep
-    grid_cell_row_pos: 2
-    grid_cell_column_pos: 0
+        state:
+          checked: !lambda |-
+            return id(hvac_climate).mode == climate::CLIMATE_MODE_FAN_ONLY;

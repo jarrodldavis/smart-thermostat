@@ -1,6 +1,5 @@
-lvgl:
-  pages:
-  - !include
+packages:
+  backup_type: !include
     file: ../choice_3.yaml
     vars:
       entity: backup_type
@@ -10,14 +9,14 @@ lvgl:
       option0: None
       option1: Electric supplemental
       option2: Furnace replacement
-  - !include
+  auto_backup: !include
     file: ../toggle.yaml
     vars:
       entity: auto_backup
       title: Automatic backup
       previous: backup_type_page
       next: backup_policy_page
-  - !include
+  backup_policy: !include
     file: ../choice_3.yaml
     vars:
       entity: backup_policy
@@ -27,23 +26,25 @@ lvgl:
       option0: Local demand
       option1: Outdoor temperature
       option2: Either
-  - !include
+  balance_point: !include
     file: ../number.yaml
     vars:
+      unit: "C"
+      decimals: 1
       kind: ABSOLUTE
       f_step: 1.0
       entity: balance_point
       title: Balance point
       previous: backup_policy_page
       next: balance_confirmed_page
-  - !include
+  balance_confirmed: !include
     file: ../toggle.yaml
     vars:
       entity: balance_confirmed
       title: Balance point confirmed
       previous: balance_point_page
       next: outdoor_units_page
-  - !include
+  outdoor_units: !include
     file: ../choice_2.yaml
     vars:
       entity: outdoor_units
@@ -52,10 +53,19 @@ lvgl:
       next: emergency_heat_page
       option0: Celsius
       option1: Fahrenheit
-  - !include
+  emergency_heat: !include
     file: ../toggle.yaml
     vars:
       entity: emergency_heat
       title: Emergency heat
       previous: outdoor_units_page
       next: backup_type_page
+
+script:
+  - id: !extend refresh_ui
+    then:
+    - lvgl.widget.update:
+        id: emergency_heat_on
+        state:
+          disabled: !lambda |-
+            return id(equipment).current_option() != "Heat pump" || id(backup_type).current_option() == "None";

@@ -1,72 +1,103 @@
-id: wifi_setup_page
-styles: screen
-scrollable: false
-layout:
-  type: GRID
-  grid_rows: [24, 150, 40]
-  grid_columns: [150, FR(1)]
-  grid_cell_x_align: STRETCH
-  grid_cell_y_align: STRETCH
-  pad_row: 4
-  pad_column: 6
-widgets:
-- label:
-    text: Wi-Fi setup
-    id: wifi_setup_status
-    styles: large_text
-    grid_cell_row_pos: 0
-    grid_cell_column_pos: 0
-    grid_cell_column_span: 2
-    grid_cell_y_align: CENTER
-- qrcode:
-    id: wifi_setup_qr
-    size: 150
-    width: 150
-    height: 150
-    light_color: 0xFFFFFF
-    dark_color: 0x000000
-    border_width: 12
-    border_color: 0xFFFFFF
-    grid_cell_row_pos: 1
-    grid_cell_column_pos: 0
-    grid_cell_x_align: CENTER
-    grid_cell_y_align: CENTER
-# Containers inherit the page text style.
-- container:
-    scrollable: false
-    grid_cell_row_pos: 1
-    grid_cell_column_pos: 1
-    layout:
-      type: FLEX
-      flex_flow: COLUMN
-      flex_align_main: SPACE_EVENLY
-      flex_align_cross: CENTER
-    widgets:
-    - label:
-        text: Scan to join Wi-Fi
-    - label:
-        text: ''
-        long_mode: wrap
-        width: 100%
-        styles: centered_text
+lvgl:
+  pages:
+    - id: wifi_setup_page
+      styles: screen
+      scrollable: false
+      layout:
+        type: GRID
+        grid_rows: [24, 150, 40]
+        grid_columns: [150, FR(1)]
+        grid_cell_x_align: STRETCH
+        grid_cell_y_align: STRETCH
+        pad_row: 4
+        pad_column: 6
+      widgets:
+      - label:
+          text: Wi-Fi setup
+          id: wifi_setup_status
+          styles: large_text
+          grid_cell_row_pos: 0
+          grid_cell_column_pos: 0
+          grid_cell_column_span: 2
+          grid_cell_y_align: CENTER
+      - qrcode:
+          id: wifi_setup_qr
+          size: 150
+          width: 150
+          height: 150
+          light_color: 0xFFFFFF
+          dark_color: 0x000000
+          border_width: 12
+          border_color: 0xFFFFFF
+          grid_cell_row_pos: 1
+          grid_cell_column_pos: 0
+          grid_cell_x_align: CENTER
+          grid_cell_y_align: CENTER
+      # Containers inherit the page text style.
+      - container:
+          scrollable: false
+          grid_cell_row_pos: 1
+          grid_cell_column_pos: 1
+          layout:
+            type: FLEX
+            flex_flow: COLUMN
+            flex_align_main: SPACE_EVENLY
+            flex_align_cross: CENTER
+          widgets:
+          - label:
+              text: Scan to join Wi-Fi
+          - label:
+              text: ''
+              long_mode: wrap
+              width: 100%
+              styles: centered_text
+              id: wifi_setup_ssid
+          - label:
+              text: ''
+              styles: centered_text
+              id: wifi_password_label
+          - label:
+              text: "Then open\n192.168.4.1"
+              styles: centered_text
+      - buttonmatrix:
+          scrollable: false
+          rows:
+          - buttons:
+            - text: Back
+              control:
+                no_repeat: true
+              on_click:
+              - lvgl.page.show: diagnostics_page
+              - script.execute: ui_beep
+          grid_cell_row_pos: 2
+          grid_cell_column_pos: 0
+          grid_cell_column_span: 2
+
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+      # Credentials are stable for this boot; generate once, before opening setup.
+      - lvgl.qrcode.update:
+          id: wifi_setup_qr
+          text: !lambda |-
+            // Generated SSID/password contain only QR-safe letters, digits and hyphens.
+            return str_sprintf("WIFI:T:WPA;S:%s;P:%s;;",
+              id(setup_credentials).ssid(), id(setup_credentials).password());
+
+script:
+  - id: !extend refresh_ui
+    then:
+    - lvgl.label.update:
+        id: wifi_setup_status
+        text: !lambda |-
+          return std::string(id(setup_credentials).is_active() ? "Wi-Fi setup (active)" : "Wi-Fi setup (inactive)");
+    - lvgl.label.update:
         id: wifi_setup_ssid
-    - label:
-        text: ''
-        styles: centered_text
+        text: !lambda |-
+          return std::string(id(setup_credentials).ssid());
+    - lvgl.label.update:
         id: wifi_password_label
-    - label:
-        text: "Then open\n192.168.4.1"
-        styles: centered_text
-- buttonmatrix:
-    scrollable: false
-    rows:
-    - buttons:
-      - text: Back
-        control:
-          no_repeat: true
-        on_click:
-        - lvgl.page.show: diagnostics_page
-        - script.execute: ui_beep
-    grid_cell_row_pos: 2
-    grid_cell_column_pos: 0
-    grid_cell_column_span: 2
+        text: !lambda |-
+          const char *password = id(setup_credentials).password();
+          return str_sprintf("%.10s\n%s", password, password + 10);

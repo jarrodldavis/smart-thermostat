@@ -1,6 +1,5 @@
-lvgl:
-  pages:
-  - !include
+packages:
+  equipment: !include
     file: ../choice_2.yaml
     vars:
       entity: equipment
@@ -9,7 +8,7 @@ lvgl:
       next: compressor_stages_page
       option0: Conventional
       option1: Heat pump
-  - !include
+  compressor_stages: !include
     file: ../choice_2.yaml
     vars:
       entity: compressor_stages
@@ -18,7 +17,7 @@ lvgl:
       next: valve_polarity_page
       option0: '1'
       option1: '2'
-  - !include
+  valve_polarity: !include
     file: ../choice_2.yaml
     vars:
       entity: valve_polarity
@@ -27,32 +26,36 @@ lvgl:
       next: valve_pre_change_delay_page
       option0: Energized in cooling
       option1: Energized in heating
-  - !include
+  valve_pre_change_delay: !include
     file: ../number.yaml
     vars:
+      unit: "s"
+      decimals: 0
       kind: NONE
       f_step: 1.0
       entity: valve_pre_change_delay
       title: O/B pre-change delay
       previous: valve_polarity_page
       next: valve_post_change_delay_page
-  - !include
+  valve_post_change_delay: !include
     file: ../number.yaml
     vars:
+      unit: "s"
+      decimals: 0
       kind: NONE
       f_step: 1.0
       entity: valve_post_change_delay
       title: O/B post-change delay
       previous: valve_pre_change_delay_page
       next: retain_valve_on_stop_page
-  - !include
+  retain_valve_on_stop: !include
     file: ../toggle.yaml
     vars:
       entity: retain_valve_on_stop
       title: Retain O/B on stop
       previous: valve_post_change_delay_page
       next: heating_fan_page
-  - !include
+  heating_fan: !include
     file: ../choice_2.yaml
     vars:
       entity: heating_fan

@@ -159,16 +159,18 @@ Complete supervised equipment testing before relying on the thermostat.
 | `packages/sensors.yaml` | Sensor filters, calibration, outdoor input, fault handling |
 | `packages/climate.yaml` | Thermostat, equipment settings, supplemental requests |
 | `packages/climate/outputs.yaml` | Output routing, interlocks, transition scripts |
-| `packages/ui.yaml` | Shared LVGL theme, lifecycle, refresh actions |
-| `packages/ui/screens/` | Main/diagnostic screens and settings grouped by section |
-| `packages/ui/*.yaml` | Reusable settings widgets and navigation templates |
+| `packages/ui.yaml` | Shared LVGL theme, lifecycle, refresh scheduling, and touch feedback |
+| `packages/ui/screens/` | Screen layouts, refresh actions, screen-specific scripts, and settings sections |
+| `packages/ui/*.yaml` | Settings page templates with state synchronization, and shared navigation |
 | `include/`, `components/` | Temperature UI helpers and generated setup-AP password |
 | `tests/` | Configuration profiles, Python/helper tests, controller integration |
 | `scripts/`, `installer/` | Release preparation, packaging, browser installer |
 
 For HVAC changes, edit thermostat settings in `climate.yaml` and output routing
 in `climate/outputs.yaml`. For UI changes, edit the relevant screen or settings
-section; shared styles and refresh actions are in `ui.yaml`.
+section. Screen files contain their layouts and behavior; settings templates bind
+pages to their entities and contribute refresh actions. Shared styles, display
+lifecycle, and refresh scheduling are in `ui.yaml`.
 
 When changing hardware configuration, verify sensor readings and touch
 calibration on the board. Keep display memory usage within the no-PSRAM target.

@@ -1,17 +1,20 @@
-lvgl:
-  pages:
-  - !include
+packages:
+  stage_delta: !include
     file: ../number.yaml
     vars:
+      unit: "C"
+      decimals: 1
       kind: DIFFERENCE
       f_step: 0.1
       entity: stage_delta
       title: Supplemental threshold
       previous: stage_delay_page
       next: stage_delay_page
-  - !include
+  stage_delay: !include
     file: ../number.yaml
     vars:
+      unit: "min"
+      decimals: 1
       kind: NONE
       f_step: 1.0
       entity: stage_delay
